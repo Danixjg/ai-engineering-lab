@@ -73,7 +73,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "checks"
+        "checks",
+        "all_passed"
       ],
       "properties": {
         "checks": {
@@ -139,7 +140,8 @@
           "type": "string"
         },
         "output": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 10000
         },
         "duration_seconds": {
           "type": "number",

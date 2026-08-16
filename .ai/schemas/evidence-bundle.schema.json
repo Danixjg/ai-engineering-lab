@@ -11,7 +11,8 @@
     "decision",
     "implementation",
     "verification",
-    "findings"
+    "findings",
+    "generated_at"
   ],
   "properties": {
     "schema_version": {
