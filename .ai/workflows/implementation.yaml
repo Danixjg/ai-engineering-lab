@@ -2,60 +2,122 @@ version: "0.1"
 
 name: autonomous-implementation
 
+# States must conform to workflow-state.schema.json#/properties/state/enum
+
 entry_state: received
 
 states:
 
   received:
+    description: >
+      Engineering task received and acknowledged. No work has started.
+    next: planning
+
+  planning:
+    description: >
+      Task is being analysed. Agent determines scope, approach, and any
+      up-front clarification needed.
+    next: ready_for_build
+    on_ambiguity: needs_human
+
+  ready_for_build:
+    description: >
+      Task is understood and ready to be handed to the Builder Agent.
     next: building
 
   building:
     agent: AGENT-BUILDER-01
+    description: >
+      Builder Agent implements the Engineering Task, runs local verification,
+      and commits the result.
     input: engineering_task
     output: execution_result
     next: verification
+    on_blocked: blocked
 
   verification:
     agent: AGENT-VERIFIER-01
+    description: >
+      Verifier Agent independently runs all deterministic checks against the
+      candidate commit and produces a Verification Result.
     input:
       - engineering_task
       - execution_result
     output: verification_result
 
     transitions:
-
       passed:
         next: review
-
       failed:
-        next: repair_decision
-
-      blocked:
-        next: needs_human
-
-  repair_decision:
-
-    transitions:
-
-      attempts_remaining:
         next: repairing
-
-      max_attempts_reached:
+        condition: attempts_remaining
+      failed_no_attempts:
         next: needs_human
-
+        condition: max_attempts_reached
       non_retryable:
         next: needs_human
+      blocked:
+        next: blocked
 
   repairing:
     agent: AGENT-BUILDER-01
+    description: >
+      Builder Agent receives a Repair Request derived from the Verification
+      Result, applies the smallest appropriate correction, re-runs
+      verification, and produces an updated Execution Result.
     input:
       - engineering_task
       - repair_request
     output: execution_result
     next: verification
+    on_blocked: blocked
 
   review:
-    next: needs_human
+    description: >
+      Implementation has passed all automated checks. Awaiting code review
+      by a Reviewer Agent or human.
+    next: judging
+
+  judging:
+    description: >
+      Judge Agent (or human) evaluates the review findings and evidence
+      bundle and makes a pass/fail decision.
+    input:
+      - engineering_task
+      - evidence_bundle
+    output: decision
+
+    transitions:
+      approved:
+        next: approved
+      rejected:
+        next: needs_human
+      needs_human:
+        next: needs_human
+
+  approved:
+    description: >
+      Implementation approved. Ready for merge.
+    next: merged
+    on_merge_blocked: needs_human
+
+  merged:
+    description: >
+      Pull request merged into the target branch.
+    terminal: true
+
+  rejected:
+    description: >
+      Implementation rejected after review. Escalated for human decision.
+    terminal: true
+
+  blocked:
+    description: >
+      A non-retryable blocker prevents progress. Human intervention required.
+    terminal: true
 
   needs_human:
+    description: >
+      Workflow cannot continue autonomously. Human must inspect, decide, and
+      resume or close the task.
     terminal: true
