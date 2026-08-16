@@ -221,6 +221,22 @@ The result must contain:
 
 Do not use prose as a substitute for required structured output.
 
+## Workflow States
+
+The Builder Agent participates in the following states defined in
+`.ai/schemas/workflow-state.schema.json` and `.ai/workflows/implementation.yaml`:
+
+| State | Builder role |
+|---|---|
+| `building` | Primary implementation turn |
+| `repairing` | Repair turn after a failed verification |
+| `blocked` | Builder reports an unresolvable blocker |
+
+The Builder does not own or transition states beyond reporting its output
+(`execution_result`). Workflow orchestration is external.
+
+---
+
 ## Repair Requests
 
 You may receive a Repair Request conforming to:
