@@ -1,0 +1,61 @@
+version: "0.1"
+
+name: autonomous-implementation
+
+entry_state: received
+
+states:
+
+  received:
+    next: building
+
+  building:
+    agent: AGENT-BUILDER-01
+    input: engineering_task
+    output: execution_result
+    next: verification
+
+  verification:
+    agent: AGENT-VERIFIER-01
+    input:
+      - engineering_task
+      - execution_result
+    output: verification_result
+
+    transitions:
+
+      passed:
+        next: review
+
+      failed:
+        next: repair_decision
+
+      blocked:
+        next: needs_human
+
+  repair_decision:
+
+    transitions:
+
+      attempts_remaining:
+        next: repairing
+
+      max_attempts_reached:
+        next: needs_human
+
+      non_retryable:
+        next: needs_human
+
+  repairing:
+    agent: AGENT-BUILDER-01
+    input:
+      - engineering_task
+      - repair_request
+    output: execution_result
+    next: verification
+
+  review:
+    next: needs_human
+
+  needs_human:
+    terminal: true

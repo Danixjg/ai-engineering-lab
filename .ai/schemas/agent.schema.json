@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/agent.schema.json",
+  "title": "Engineering Agent",
+  "description": "Machine-readable definition of an autonomous software engineering agent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "agent_id",
+    "name",
+    "role",
+    "runtime",
+    "responsibilities",
+    "forbidden_actions",
+    "inputs",
+    "outputs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+
+    "agent_id": {
+      "type": "string",
+      "pattern": "^AGENT-[A-Z0-9-]+$"
+    },
+
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+
+    "role": {
+      "type": "string",
+      "enum": [
+        "planner",
+        "architect",
+        "builder",
+        "tester",
+        "reviewer",
+        "security",
+        "adversarial",
+        "judge",
+        "release"
+      ]
+    },
+
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+
+    "responsibilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+
+    "forbidden_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "engineering_task",
+          "execution_result",
+          "findings",
+          "evidence_bundle",
+          "repository",
+          "pull_request"
+        ]
+      }
+    },
+
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "engineering_task",
+          "execution_result",
+          "finding",
+          "evidence_bundle",
+          "pull_request"
+        ]
+      }
+    },
+
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository_read": {
+          "type": "boolean",
+          "default": true
+        },
+        "repository_write": {
+          "type": "boolean",
+          "default": false
+        },
+        "create_branch": {
+          "type": "boolean",
+          "default": false
+        },
+        "create_commit": {
+          "type": "boolean",
+          "default": false
+        },
+        "create_pull_request": {
+          "type": "boolean",
+          "default": false
+        },
+        "merge_pull_request": {
+          "type": "boolean",
+          "default": false
+        },
+        "deploy": {
+          "type": "boolean",
+          "default": false
+        },
+        "production_access": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_repair_attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_task_duration_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_files_changed": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

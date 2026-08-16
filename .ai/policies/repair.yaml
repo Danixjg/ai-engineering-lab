@@ -1,0 +1,40 @@
+version: "0.1"
+
+max_attempts: 3
+
+on_failure:
+
+  retryable:
+    - test_failure
+    - build_failure
+    - type_check_failure
+    - lint_failure
+    - acceptance_criterion_failure
+
+  non_retryable:
+    - security_failure
+    - production_access_required
+    - permission_failure
+    - destructive_change_required
+
+retry:
+  preserve_original_task: true
+  preserve_acceptance_criteria: true
+  preserve_failed_tests: true
+
+stop_conditions:
+  - max_attempts_reached
+  - non_retryable_failure
+  - human_intervention_required
+  - verification_environment_unavailable
+
+final_states:
+
+  after_success:
+    status: verified
+
+  after_max_attempts:
+    status: needs_human
+
+  after_non_retryable_failure:
+    status: needs_human

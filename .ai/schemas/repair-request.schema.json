@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/repair-request.schema.json",
+  "title": "Repair Request",
+  "description": "A structured request generated after verification identifies a failure.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "repair_id",
+    "task_id",
+    "attempt",
+    "reason",
+    "failures",
+    "required_action",
+    "constraints"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "repair_id": {
+      "type": "string",
+      "pattern": "^REPAIR-[A-Z0-9-]+$"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "test_failure",
+        "build_failure",
+        "type_check_failure",
+        "lint_failure",
+        "security_failure",
+        "dependency_failure",
+        "acceptance_criterion_failure",
+        "requirement_failure",
+        "architecture_failure",
+        "other"
+      ]
+    },
+    "failures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/failure"
+      }
+    },
+    "required_action": {
+      "type": "string",
+      "minLength": 1
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source_verification": {
+      "type": "string"
+    },
+    "target_branch": {
+      "type": "string"
+    },
+    "max_additional_attempts": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 2
+    }
+  },
+  "$defs": {
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check_id",
+        "reason"
+      ],
+      "properties": {
+        "check_id": {
+          "type": "string"
+        },
+        "criterion_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

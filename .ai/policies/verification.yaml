@@ -1,0 +1,47 @@
+version: "0.1"
+
+defaults:
+  blocking: true
+
+checks:
+
+  build:
+    required: true
+    blocking: true
+
+  unit_tests:
+    required: true
+    blocking: true
+
+  integration_tests:
+    required: false
+    blocking: true
+
+  type_check:
+    required: true
+    blocking: true
+
+  lint:
+    required: true
+    blocking: false
+
+  format:
+    required: true
+    blocking: false
+
+  security:
+    required: true
+    blocking: true
+
+  dependency:
+    required: true
+    blocking: false
+
+acceptance_criteria:
+  all_required: true
+
+decision:
+  pass_when:
+    - all_required_checks_pass
+    - all_required_acceptance_criteria_pass
+    - no_blocking_findings

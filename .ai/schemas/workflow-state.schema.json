@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/workflow-state.schema.json",
+  "title": "Engineering Workflow State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "state"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "received",
+        "planning",
+        "ready_for_build",
+        "building",
+        "verification",
+        "repairing",
+        "review",
+        "security_review",
+        "adversarial_review",
+        "judging",
+        "ready_for_human",
+        "approved",
+        "rejected",
+        "merged",
+        "released",
+        "blocked",
+        "needs_human"
+      ]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason": {
+      "type": "string"
+    }
+  }
+}
