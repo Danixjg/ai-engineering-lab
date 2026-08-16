@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/finding.schema.json",
+  "title": "Engineering Finding",
+  "description": "A structured issue identified during review or verification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "finding_id",
+    "severity",
+    "category",
+    "title",
+    "description",
+    "status"
+  ],
+  "properties": {
+    "finding_id": {
+      "type": "string",
+      "pattern": "^FIND-[A-Z0-9-]+$"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "correctness",
+        "requirement",
+        "architecture",
+        "maintainability",
+        "performance",
+        "security",
+        "reliability",
+        "testing",
+        "documentation",
+        "dependency",
+        "other"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "file": {
+      "type": "string"
+    },
+    "line": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "requirement_id": {
+      "type": "string"
+    },
+    "acceptance_criterion_id": {
+      "type": "string"
+    },
+    "recommendation": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "accepted",
+        "resolved",
+        "false_positive"
+      ]
+    },
+    "detected_by": {
+      "type": "string"
+    }
+  }
+}
