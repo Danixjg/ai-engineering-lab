@@ -1,0 +1,32 @@
+{
+  "schema_version": "0.1",
+  "task_id": "TASK-SKILL-EXAMPLE",
+  "status": "passed",
+  "commit": {
+    "sha": "0123456789abcdef",
+    "branch": "feat/example",
+    "repository": "https://example.invalid/repository.git"
+  },
+  "checks": [
+    {
+      "check_id": "CHECK-UNIT-001",
+      "name": "Unit tests",
+      "category": "unit_test",
+      "status": "passed",
+      "command": "example test command",
+      "exit_code": 0,
+      "duration_seconds": 1.2,
+      "output_reference": "verification log: unit tests",
+      "blocking": true
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "criterion_id": "AC-SKILL-001",
+      "status": "passed",
+      "evidence": "CHECK-UNIT-001"
+    }
+  ],
+  "summary": "Illustrative passing verification result.",
+  "generated_at": "2026-08-20T00:00:00Z"
+}

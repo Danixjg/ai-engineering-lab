@@ -1,0 +1,3 @@
+interface:
+  display_name: "Repository Analysis"
+  short_description: "Map a repository before engineering work"

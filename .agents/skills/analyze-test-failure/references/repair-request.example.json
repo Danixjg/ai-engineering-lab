@@ -1,0 +1,29 @@
+{
+  "schema_version": "0.1",
+  "repair_id": "REPAIR-SKILL-001",
+  "task_id": "TASK-SKILL-EXAMPLE",
+  "attempt": 1,
+  "reason": "test_failure",
+  "failures": [
+    {
+      "check_id": "CHECK-UNIT-001",
+      "criterion_id": "AC-SKILL-001",
+      "reason": "Expected status was not returned.",
+      "evidence": "verification log: unit tests",
+      "file": "src/example.ts",
+      "line": 12,
+      "retryable": true
+    }
+  ],
+  "required_action": "Correct the candidate behavior that violates AC-SKILL-001.",
+  "constraints": [
+    "Do not modify the original acceptance criteria.",
+    "Do not remove or weaken a valid failing test.",
+    "Do not bypass verification.",
+    "Do not make unrelated changes.",
+    "Re-run the failed check and the broader applicable suite."
+  ],
+  "source_verification": "CHECK-UNIT-001",
+  "target_branch": "feat/example",
+  "max_additional_attempts": 2
+}
