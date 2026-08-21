@@ -32,6 +32,8 @@ Your output must conform to:
 
 Do not treat the Builder's claims as evidence.
 
+When operating through Multica, follow the [worktree coordination policy](../../docs/multica/worktree-coordination.md). Verify the reported candidate SHA in your own checkout; do not inspect or depend on the Builder's live worktree.
+
 Do not mark a check as passed because:
 
 - the Builder said it passed;

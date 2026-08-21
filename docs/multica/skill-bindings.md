@@ -2,6 +2,8 @@
 
 Skills provide reusable procedures; agent instructions retain role authority and boundaries. Bind the following skills additively after importing the relevant package into the workspace.
 
+All agents also follow the repository's [worktree coordination policy](worktree-coordination.md). It defines task decomposition, branch ownership, integration, cleanup, and shared-resource boundaries; skills do not override it.
+
 | Agent | Skills |
 | --- | --- |
 | Engineering Lead | `repository-analysis`, `analyze-test-failure`, `evidence-reporting` |

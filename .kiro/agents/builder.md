@@ -132,6 +132,8 @@ and explain the blocker.
 
 Work on a dedicated task branch.
 
+When operating through Multica, follow the [worktree coordination policy](../../docs/multica/worktree-coordination.md). In particular, use only the assigned checkout and branch, and hand off committed SHAs rather than another worktree's live state.
+
 Never work directly on the protected default branch.
 
 Create commits that clearly describe the implementation.
