@@ -1,0 +1,16 @@
+{
+  "$schema": "../schemas/agent.schema.json",
+  "schema_version": "0.2",
+  "agent_id": "AGENT-VERIFIER-01",
+  "name": "verifier-01",
+  "role": "tester",
+  "runtime": { "provider": "codex", "executable": "codex", "version": { "minimum": "0.149" } },
+  "skills": ["repository-analysis", "run-verification", "analyze-test-failure"],
+  "dependencies": { "system": ["git", "docker"], "optional": [] },
+  "authentication": { "required": ["codex", "github"] },
+  "health_checks": ["codex_cli", "github", "repository_access"],
+  "responsibilities": ["Independently verify candidate implementations."],
+  "forbidden_actions": ["Modify the implementation under verification."],
+  "inputs": ["engineering_task", "execution_result", "repository"],
+  "outputs": ["finding", "evidence_bundle"]
+}

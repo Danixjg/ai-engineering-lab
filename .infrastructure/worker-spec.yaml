@@ -1,0 +1,26 @@
+# This file is the compatibility contract for every machine that runs a
+# Multica worker for this repository.  Keep credentials, URLs, workspace IDs,
+# and executable paths in the worker's protected local configuration.
+worker:
+  multica: required
+  daemon: required
+
+agents:
+  kiro:
+    required: true
+    command: kiro-cli
+    version: "2.0"
+    auth: required
+  codex:
+    required: true
+    command: codex
+    version: "0.149"
+    auth: required
+
+tools:
+  git: required
+  docker: required
+
+languages:
+  python: "3.12"
+  node: "24"

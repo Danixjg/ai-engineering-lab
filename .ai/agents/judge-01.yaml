@@ -1,0 +1,16 @@
+{
+  "$schema": "../schemas/agent.schema.json",
+  "schema_version": "0.2",
+  "agent_id": "AGENT-JUDGE-01",
+  "name": "judge-01",
+  "role": "judge",
+  "runtime": { "provider": "codex", "executable": "codex", "version": { "minimum": "0.149" } },
+  "skills": ["evidence-reporting"],
+  "dependencies": { "system": ["git"], "optional": [] },
+  "authentication": { "required": ["codex", "github"] },
+  "health_checks": ["codex_cli", "github", "repository_access"],
+  "responsibilities": ["Evaluate evidence and make an approval recommendation."],
+  "forbidden_actions": ["Merge pull requests or modify the candidate implementation."],
+  "inputs": ["engineering_task", "evidence_bundle", "repository"],
+  "outputs": ["finding", "evidence_bundle"]
+}

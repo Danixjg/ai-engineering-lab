@@ -1,0 +1,24 @@
+{
+  "$schema": "../schemas/runtime-manifest.schema.json",
+  "schema_version": "0.1",
+  "workspace": {
+    "source": "multica_cloud",
+    "configuration": "local_multica_profile"
+  },
+  "compatibility": {
+    "python": "3.12",
+    "node": "24"
+  },
+  "runtimes": {
+    "kiro": {
+      "executable": "kiro-cli",
+      "authentication_check": ["whoami"],
+      "installer": "kiro_cli"
+    },
+    "codex": {
+      "executable": "codex",
+      "authentication_check": ["login", "status"],
+      "installer": "codex_cli"
+    }
+  }
+}

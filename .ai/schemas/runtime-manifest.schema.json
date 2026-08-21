@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/runtime-manifest.schema.json",
+  "title": "MultiEngin Runtime Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "workspace", "compatibility", "runtimes"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "const": "0.1" },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "configuration"],
+      "properties": {
+        "source": { "const": "multica_cloud" },
+        "configuration": { "const": "local_multica_profile" }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "node"],
+      "properties": {
+        "python": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+        "node": { "type": "string", "pattern": "^[0-9]+$" }
+      }
+    },
+    "runtimes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["executable", "authentication_check", "installer"],
+        "properties": {
+          "executable": { "type": "string", "minLength": 1 },
+          "authentication_check": { "type": "array", "items": { "type": "string" } },
+          "installer": { "enum": ["kiro_cli", "codex_cli"] }
+        }
+      }
+    }
+  }
+}

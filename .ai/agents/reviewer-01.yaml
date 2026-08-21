@@ -1,0 +1,16 @@
+{
+  "$schema": "../schemas/agent.schema.json",
+  "schema_version": "0.2",
+  "agent_id": "AGENT-REVIEWER-01",
+  "name": "reviewer-01",
+  "role": "reviewer",
+  "runtime": { "provider": "codex", "executable": "codex", "version": { "minimum": "0.149" } },
+  "skills": ["repository-analysis"],
+  "dependencies": { "system": ["git"], "optional": [] },
+  "authentication": { "required": ["codex", "github"] },
+  "health_checks": ["codex_cli", "github", "repository_access"],
+  "responsibilities": ["Review implementation quality and report findings."],
+  "forbidden_actions": ["Merge or approve a pull request."],
+  "inputs": ["engineering_task", "pull_request", "repository"],
+  "outputs": ["finding", "evidence_bundle"]
+}
