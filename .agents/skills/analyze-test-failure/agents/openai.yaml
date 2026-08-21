@@ -1,0 +1,3 @@
+interface:
+  display_name: "Analyze Test Failure"
+  short_description: "Classify failures into bounded repairs"

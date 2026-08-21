@@ -1,0 +1,29 @@
+{
+  "schema_version": "0.1",
+  "task_id": "TASK-SKILL-EXAMPLE",
+  "decision": "pass",
+  "implementation": {
+    "branch": "feat/example",
+    "commit_sha": "0123456789abcdef",
+    "pull_request": 42
+  },
+  "verification": {
+    "checks": [
+      {
+        "name": "Unit tests",
+        "status": "passed",
+        "source": "CHECK-UNIT-001"
+      }
+    ],
+    "all_required_checks_passed": true
+  },
+  "findings": [],
+  "acceptance_criteria": [
+    {
+      "criterion_id": "AC-SKILL-001",
+      "status": "passed",
+      "evidence": "CHECK-UNIT-001"
+    }
+  ],
+  "generated_at": "2026-08-20T00:00:00Z"
+}

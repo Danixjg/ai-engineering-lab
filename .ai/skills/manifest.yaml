@@ -1,0 +1,48 @@
+version: "0.1"
+
+source_root: ".agents/skills"
+
+skills:
+  repository-analysis:
+    version: "0.1.0"
+    trust: trusted
+    risk: low
+    supported_roles:
+      - engineering-lead
+      - builder
+      - verifier
+      - reviewer
+      - security-adversary
+      - judge
+
+  git-workflow:
+    version: "0.1.0"
+    trust: trusted
+    risk: medium
+    supported_roles:
+      - builder
+
+  run-verification:
+    version: "0.1.0"
+    trust: trusted
+    risk: medium
+    supported_roles:
+      - builder
+      - verifier
+
+  analyze-test-failure:
+    version: "0.1.0"
+    trust: trusted
+    risk: medium
+    supported_roles:
+      - engineering-lead
+      - builder
+      - verifier
+
+  evidence-reporting:
+    version: "0.1.0"
+    trust: trusted
+    risk: low
+    supported_roles:
+      - engineering-lead
+      - judge
