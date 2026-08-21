@@ -1,0 +1,16 @@
+{
+  "$schema": "../schemas/agent.schema.json",
+  "schema_version": "0.2",
+  "agent_id": "AGENT-BUILDER-01",
+  "name": "builder-01",
+  "role": "builder",
+  "runtime": { "provider": "kiro", "executable": "kiro-cli", "version": { "minimum": "2.0" } },
+  "skills": ["repository-analysis", "git-workflow", "analyze-test-failure"],
+  "dependencies": { "system": ["git"], "optional": ["docker"] },
+  "authentication": { "required": ["kiro", "github"] },
+  "health_checks": ["kiro_cli", "github", "repository_access"],
+  "responsibilities": ["Implement approved engineering tasks and report execution evidence."],
+  "forbidden_actions": ["Merge or approve its own pull request."],
+  "inputs": ["engineering_task", "repository"],
+  "outputs": ["execution_result", "pull_request"]
+}

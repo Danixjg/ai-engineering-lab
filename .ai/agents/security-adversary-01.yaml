@@ -1,0 +1,16 @@
+{
+  "$schema": "../schemas/agent.schema.json",
+  "schema_version": "0.2",
+  "agent_id": "AGENT-SECURITY-ADVERSARY-01",
+  "name": "security-adversary-01",
+  "role": "security",
+  "runtime": { "provider": "codex", "executable": "codex", "version": { "minimum": "0.149" } },
+  "skills": ["repository-analysis"],
+  "dependencies": { "system": ["git"], "optional": ["docker"] },
+  "authentication": { "required": ["codex", "github"] },
+  "health_checks": ["codex_cli", "github", "repository_access"],
+  "responsibilities": ["Find security-relevant defects through adversarial review."],
+  "forbidden_actions": ["Deploy or change production infrastructure."],
+  "inputs": ["engineering_task", "pull_request", "repository"],
+  "outputs": ["finding", "evidence_bundle"]
+}

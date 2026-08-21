@@ -13,8 +13,12 @@ server URL, runtime path, model credential, or other instance secret.
 | `.kiro/agents/` | Builder and verifier role instructions. |
 | `.ai/schemas/` | Contracts for tasks, results, findings, and workflow state. |
 | `.ai/workflows/` | The engineering-task lifecycle. |
+| `.ai/agents/` | Canonical runtime, skill, dependency, and health requirements for each agent. |
+| `.ai/runtime/` | Portable-runtime compatibility and provider adapters. |
 | `.agents/skills/` | Canonical sources for reusable agent skills. |
 | `docs/multica/` | Multica skill bindings and [worktree coordination rules](docs/multica/worktree-coordination.md). |
+| `bin/multiengin` | Portable local-runtime launcher for the current machine. |
+| `.infrastructure/` | Low-level macOS/Linux baseline bootstrap and full-host verification. |
 | `scripts/package-skill.py` | Packages a canonical skill for import into Multica. |
 
 ## Multica instance setup
@@ -145,3 +149,30 @@ multica daemon status
 
 Keep the resulting IDs and operational evidence in the Multica workspace or
 the organization's approved operations system, not in this repository.
+
+## Portable local runtime
+
+Multica Cloud owns shared agents, squads, skills, policies, and engineering
+state. [MultiEngin](docs/multiengin.md) makes the particular laptop or desktop
+you are using capable of executing selected cloud agents; it does not create a
+separate worker fleet or duplicate cloud state.
+
+Select and provision agents interactively:
+
+```bash
+./bin/multiengin start
+```
+
+Or target an agent, inspect all configured agents, and diagnose the local
+environment:
+
+```bash
+./bin/multiengin start builder-01
+./bin/multiengin agents --all
+./bin/multiengin doctor --all
+```
+
+MultiEngin installs agent **CLIs/runtimes**, not hosted frontier models. It
+leaves application dependencies to each repository's own reproducible project
+environment. The lower-level `.infrastructure/verify-worker.sh` remains useful
+when validating a full host against the shared Python/Node compatibility line.
