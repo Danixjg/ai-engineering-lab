@@ -1,0 +1,24 @@
+{
+  "$schema": "../schemas/agent.schema.json",
+  "schema_version": "0.2",
+  "agent_id": "AGENT-ENGINEERING-LEAD-01",
+  "name": "engineering-lead-01",
+  "role": "engineering-lead",
+  "instructions_path": ".ai/prompts/engineering-lead.md",
+  "runtime": { "provider": "codex", "executable": "codex", "version": { "minimum": "0.149" } },
+  "skills": ["project-orchestration", "repository-analysis", "analyze-test-failure", "evidence-reporting"],
+  "dependencies": { "system": ["git"], "optional": ["docker"] },
+  "authentication": { "required": ["codex", "github"] },
+  "health_checks": ["codex_cli", "github", "repository_access"],
+  "routing": {
+    "capabilities": ["project-planning", "task-decomposition", "skill-routing", "delegation", "governance"],
+    "task_types": ["planning", "architecture", "review"],
+    "priority": 100,
+    "eligible_risk_levels": ["low", "medium", "high", "critical"],
+    "max_parallel_tasks": 3
+  },
+  "responsibilities": ["Turn authorized project briefs into bounded, staged squad delivery and report aggregate evidence."],
+  "forbidden_actions": ["Implement delegated product work, bypass human gates, or silently expand project scope."],
+  "inputs": ["project_blueprint", "routing_plan", "engineering_task", "evidence_bundle", "repository"],
+  "outputs": ["routing_plan", "engineering_task", "evidence_bundle", "decision"]
+}

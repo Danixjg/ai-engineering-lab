@@ -22,8 +22,12 @@
       "enum": [
         "received",
         "planning",
+        "repository_bootstrap",
+        "decomposition",
         "ready_for_build",
         "building",
+        "integration",
+        "independent_checks",
         "verification",
         "repairing",
         "review",

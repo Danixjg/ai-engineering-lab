@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/project-blueprint.schema.json",
+  "title": "Project Blueprint",
+  "description": "A portable project intent contract for recursive squad delivery.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_id",
+    "title",
+    "objective",
+    "repository",
+    "requirements",
+    "acceptance_criteria",
+    "constraints",
+    "risk_level",
+    "expected_outputs",
+    "execution"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "const": "0.1" },
+    "project_id": { "type": "string", "pattern": "^PROJECT-[A-Z0-9-]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "objective": { "type": "string", "minLength": 1 },
+    "repository": { "$ref": "#/$defs/repository" },
+    "requirements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/requirement" },
+      "minItems": 1
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/acceptanceCriterion" },
+      "minItems": 1
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "risk_level": { "enum": ["low", "medium", "high", "critical"] },
+    "technology": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "frameworks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "expected_outputs": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "repository",
+          "architecture",
+          "source_changes",
+          "tests",
+          "documentation",
+          "pull_request",
+          "evidence_bundle"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "execution": { "$ref": "#/$defs/execution" },
+    "metadata": { "type": "object", "additionalProperties": true }
+  },
+  "$defs": {
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "default_branch"],
+      "properties": {
+        "mode": { "enum": ["create", "existing"] },
+        "owner": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+        "url": { "type": "string", "format": "uri" },
+        "visibility": { "enum": ["private", "public", "internal"] },
+        "default_branch": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "create" } } },
+          "then": { "required": ["owner", "name", "visibility"] }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "existing" } } },
+          "then": { "required": ["url"] }
+        }
+      ]
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "priority"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^REQ-[A-Z0-9-]+$" },
+        "description": { "type": "string", "minLength": 1 },
+        "priority": { "enum": ["must", "should", "could"] }
+      }
+    },
+    "acceptanceCriterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "verification", "required"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^AC-[A-Z0-9-]+$" },
+        "description": { "type": "string", "minLength": 1 },
+        "verification": {
+          "enum": [
+            "automated_test",
+            "static_analysis",
+            "security_scan",
+            "manual_review",
+            "agent_review",
+            "runtime_check"
+          ]
+        },
+        "required": { "type": "boolean" }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "squad",
+        "max_depth",
+        "max_children_per_issue",
+        "max_parallel_tasks",
+        "authorizations",
+        "human_gates"
+      ],
+      "properties": {
+        "squad": { "type": "string", "minLength": 1 },
+        "max_depth": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "max_children_per_issue": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "max_parallel_tasks": { "type": "integer", "minimum": 1, "maximum": 6 },
+        "authorizations": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "create_multica_project",
+              "create_repository",
+              "register_repository",
+              "create_issues",
+              "create_branches",
+              "push_branches",
+              "open_pull_requests"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "human_gates": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "product_ambiguity",
+              "permission_expansion",
+              "destructive_change",
+              "production_access",
+              "deployment",
+              "merge"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

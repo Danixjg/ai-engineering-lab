@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Orchestration"
+  short_description: "Turn project briefs into bounded squad delivery"
+  default_prompt: "Use $project-orchestration to turn this project brief into a governed, staged squad plan."

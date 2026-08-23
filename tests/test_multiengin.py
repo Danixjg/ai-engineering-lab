@@ -21,7 +21,15 @@ class MultiEnginTests(unittest.TestCase):
         agents = multiengin.manifests()
         self.assertEqual(
             {agent["name"] for agent in agents},
-            {"builder-01", "verifier-01", "reviewer-01", "security-adversary-01", "judge-01"},
+            {
+                "engineering-lead-01",
+                "builder-01",
+                "integrator-01",
+                "verifier-01",
+                "reviewer-01",
+                "security-adversary-01",
+                "judge-01",
+            },
         )
         self.assertEqual(multiengin.select_agents(agents, ["builder-01"], False)[0]["runtime"]["provider"], "kiro")
 

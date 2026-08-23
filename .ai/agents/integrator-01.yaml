@@ -1,0 +1,24 @@
+{
+  "$schema": "../schemas/agent.schema.json",
+  "schema_version": "0.2",
+  "agent_id": "AGENT-INTEGRATOR-01",
+  "name": "integrator-01",
+  "role": "integrator",
+  "instructions_path": ".ai/prompts/integrator.md",
+  "runtime": { "provider": "codex", "executable": "codex", "version": { "minimum": "0.149" } },
+  "skills": ["repository-analysis", "git-workflow"],
+  "dependencies": { "system": ["git"], "optional": [] },
+  "authentication": { "required": ["codex", "github"] },
+  "health_checks": ["codex_cli", "github", "repository_access"],
+  "routing": {
+    "capabilities": ["commit-integration", "conflict-reporting", "release-branch-preparation"],
+    "task_types": ["implementation", "release"],
+    "priority": 85,
+    "eligible_risk_levels": ["low", "medium", "high"],
+    "max_parallel_tasks": 1
+  },
+  "responsibilities": ["Integrate independently verified commits in declared dependency order from a clean worktree."],
+  "forbidden_actions": ["Rewrite shared history, approve its own integration, or merge without the required gate."],
+  "inputs": ["engineering_task", "execution_result", "verification_result", "repository", "pull_request"],
+  "outputs": ["execution_result", "pull_request", "evidence_bundle"]
+}

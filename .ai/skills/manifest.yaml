@@ -1,48 +1,87 @@
-version: "0.1"
-
-source_root: ".agents/skills"
-
-skills:
-  repository-analysis:
-    version: "0.1.0"
-    trust: trusted
-    risk: low
-    supported_roles:
-      - engineering-lead
-      - builder
-      - verifier
-      - reviewer
-      - security-adversary
-      - judge
-
-  git-workflow:
-    version: "0.1.0"
-    trust: trusted
-    risk: medium
-    supported_roles:
-      - builder
-
-  run-verification:
-    version: "0.1.0"
-    trust: trusted
-    risk: medium
-    supported_roles:
-      - builder
-      - verifier
-
-  analyze-test-failure:
-    version: "0.1.0"
-    trust: trusted
-    risk: medium
-    supported_roles:
-      - engineering-lead
-      - builder
-      - verifier
-
-  evidence-reporting:
-    version: "0.1.0"
-    trust: trusted
-    risk: low
-    supported_roles:
-      - engineering-lead
-      - judge
+{
+  "schema_version": "0.2",
+  "source_root": ".agents/skills",
+  "skills": {
+    "project-orchestration": {
+      "version": "0.1.0",
+      "trust": "trusted",
+      "risk": "medium",
+      "supported_roles": ["engineering-lead"],
+      "routing": {
+        "capabilities": ["project-planning", "task-decomposition", "skill-routing", "delegation", "governance"],
+        "task_types": { "planning": 1.0, "architecture": 0.9, "review": 0.5 },
+        "artifacts": ["routing_plan", "engineering_task", "evidence_bundle"],
+        "context_cost": 0.4
+      }
+    },
+    "repository-analysis": {
+      "version": "0.1.0",
+      "trust": "trusted",
+      "risk": "low",
+      "supported_roles": ["engineering-lead", "builder", "integrator", "tester", "reviewer", "security", "judge"],
+      "routing": {
+        "capabilities": ["repository-analysis", "convention-discovery", "check-discovery"],
+        "task_types": {
+          "planning": 1.0,
+          "architecture": 1.0,
+          "implementation": 0.7,
+          "testing": 0.7,
+          "review": 0.8,
+          "security": 0.7,
+          "adversarial": 0.7,
+          "release": 0.5
+        },
+        "artifacts": ["engineering_task", "finding", "evidence_bundle"],
+        "context_cost": 0.2
+      }
+    },
+    "git-workflow": {
+      "version": "0.1.0",
+      "trust": "trusted",
+      "risk": "medium",
+      "supported_roles": ["builder", "integrator"],
+      "routing": {
+        "capabilities": ["git-delivery", "repository-bootstrap", "commit-integration"],
+        "task_types": { "implementation": 1.0, "release": 0.9 },
+        "artifacts": ["source_changes", "commit", "pull_request"],
+        "context_cost": 0.25
+      }
+    },
+    "run-verification": {
+      "version": "0.1.0",
+      "trust": "trusted",
+      "risk": "medium",
+      "supported_roles": ["builder", "tester"],
+      "routing": {
+        "capabilities": ["deterministic-verification", "acceptance-evaluation", "check-discovery"],
+        "task_types": { "implementation": 0.45, "testing": 1.0 },
+        "artifacts": ["verification_result", "evidence_bundle"],
+        "context_cost": 0.35
+      }
+    },
+    "analyze-test-failure": {
+      "version": "0.1.0",
+      "trust": "trusted",
+      "risk": "medium",
+      "supported_roles": ["engineering-lead", "builder", "tester"],
+      "routing": {
+        "capabilities": ["failure-analysis", "repair-planning"],
+        "task_types": { "implementation": 0.6, "testing": 0.9, "review": 0.4 },
+        "artifacts": ["repair_request"],
+        "context_cost": 0.2
+      }
+    },
+    "evidence-reporting": {
+      "version": "0.1.0",
+      "trust": "trusted",
+      "risk": "low",
+      "supported_roles": ["engineering-lead", "judge"],
+      "routing": {
+        "capabilities": ["evidence-evaluation", "policy-decision", "release-readiness"],
+        "task_types": { "review": 0.8, "release": 1.0 },
+        "artifacts": ["evidence_bundle", "decision"],
+        "context_cost": 0.2
+      }
+    }
+  }
+}

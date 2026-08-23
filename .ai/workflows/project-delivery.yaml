@@ -1,0 +1,66 @@
+{
+  "version": "0.1",
+  "name": "recursive-project-delivery",
+  "input": "project_blueprint",
+  "coordinator": "AGENT-ENGINEERING-LEAD-01",
+  "entry_state": "received",
+  "states": {
+    "received": { "next": "planning" },
+    "planning": {
+      "agent": "AGENT-ENGINEERING-LEAD-01",
+      "output": "routing_plan",
+      "next_when_create": "repository_bootstrap",
+      "next_when_existing": "decomposition",
+      "on_ambiguity": "needs_human"
+    },
+    "repository_bootstrap": {
+      "agent": "AGENT-BUILDER-01",
+      "condition": "create_repository_authorized",
+      "output": "execution_result",
+      "next": "decomposition",
+      "on_blocked": "needs_human"
+    },
+    "decomposition": {
+      "agent": "AGENT-ENGINEERING-LEAD-01",
+      "description": "Create bounded, staged child issues with explicit dependencies and owners.",
+      "next": "building",
+      "on_limit": "needs_human"
+    },
+    "building": {
+      "agent_role": "builder",
+      "parallel": "within_routing_plan_limit",
+      "output": "execution_result",
+      "next": "integration"
+    },
+    "integration": {
+      "agent": "AGENT-INTEGRATOR-01",
+      "input": ["engineering_task", "execution_result"],
+      "output": "execution_result",
+      "next": "independent_checks"
+    },
+    "independent_checks": {
+      "agents": ["AGENT-VERIFIER-01", "AGENT-REVIEWER-01", "AGENT-SECURITY-ADVERSARY-01"],
+      "parallel": true,
+      "candidate": "exact_integration_commit",
+      "next_on_pass": "judging",
+      "next_on_retryable_failure": "repairing",
+      "next_on_non_retryable_failure": "needs_human"
+    },
+    "repairing": {
+      "agent": "AGENT-BUILDER-01",
+      "next": "integration",
+      "bounded_by": ".ai/policies/repair.yaml"
+    },
+    "judging": {
+      "agent": "AGENT-JUDGE-01",
+      "output": "decision",
+      "next_on_pass": "ready_for_human",
+      "next_on_fail": "needs_human"
+    },
+    "ready_for_human": {
+      "description": "Required merge or deployment gates remain with the authorized human.",
+      "terminal": true
+    },
+    "needs_human": { "terminal": true }
+  }
+}

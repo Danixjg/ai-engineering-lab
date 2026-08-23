@@ -1,18 +1,22 @@
 # AI Engineering Lab
 
-This repository is the version-controlled source for an autonomous engineering
-workflow running in Multica. It contains role instructions, machine-readable
-task and evidence contracts, shared skills, and the policies that govern
-concurrent work. It intentionally does not contain a Multica workspace ID,
-server URL, runtime path, model credential, or other instance secret.
+This repository is the version-controlled control plane for autonomous
+engineering work in other GitHub repositories. A Project Blueprint can describe
+a new or existing target repository, and the Engineering Squad can turn that
+brief into bounded, staged child issues while this repository supplies the role
+instructions, routing rules, contracts, skills, and governance. It intentionally
+does not contain a Multica workspace ID, server URL, runtime path, model
+credential, or other instance secret.
 
 ## Repository layout
 
 | Path | Purpose |
 | --- | --- |
 | `.kiro/agents/` | Builder and verifier role instructions. |
+| `.ai/prompts/` | Provider-neutral lead, integration, review, security, and judge instructions. |
 | `.ai/schemas/` | Contracts for tasks, results, findings, and workflow state. |
 | `.ai/workflows/` | The engineering-task lifecycle. |
+| `.ai/blueprints/` | Portable project-intent examples for new or existing repositories. |
 | `.ai/agents/` | Canonical runtime, skill, dependency, and health requirements for each agent. |
 | `.ai/runtime/` | Portable-runtime compatibility and provider adapters. |
 | `.agents/skills/` | Canonical sources for reusable agent skills. |
@@ -20,6 +24,53 @@ server URL, runtime path, model credential, or other instance secret.
 | `bin/multiengin` | Portable local-runtime launcher for the current machine. |
 | `.infrastructure/` | Low-level macOS/Linux baseline bootstrap and full-host verification. |
 | `scripts/package-skill.py` | Packages a canonical skill for import into Multica. |
+| `bin/project-blueprint` | Validates, plans, renders, and submits a governed project brief. |
+
+## Start a project through the squad
+
+Copy and edit the example Project Blueprint. The brief makes repository
+creation, issue creation, branch/push/PR authority, recursion limits, and human
+gates explicit.
+
+```bash
+cp .ai/blueprints/project.example.json project.json
+./bin/project-blueprint validate project.json
+./bin/project-blueprint plan project.json
+./bin/project-blueprint preflight project.json
+```
+
+Preview creation of a dedicated Multica project and parent issue without
+changing the workspace:
+
+```bash
+./bin/project-blueprint submit project.json \
+  --create-project \
+  --start
+```
+
+After reviewing the plan, add `--apply` to create the Multica project, retain
+this repository as its control resource, assign the parent issue to the
+configured squad, and start the leader. Omit `--start` to create the issue in
+`backlog` without enqueueing work. The apply path first checks the live daemon,
+squad leader and membership, agents, and required skill bindings; drift blocks
+submission before any write.
+
+```bash
+./bin/project-blueprint submit project.json \
+  --create-project \
+  --start \
+  --apply
+```
+
+The Engineering Lead applies the `project-orchestration` skill. It may create
+the target GitHub repository only when the blueprint authorizes that action,
+then recursively decomposes implementation into independently verifiable child
+issues. Repository bootstrap, implementation, integration, independent checks,
+and judgment run as ordered Multica stages. See [Project Blueprints](docs/project-blueprints.md).
+
+A parent issue created directly in the Multica UI follows the same route when
+it contains equivalent blueprint fields. The checked-in helper is preferable
+when you want validation and a reproducible routing preview before assignment.
 
 ## Multica instance setup
 
@@ -105,8 +156,9 @@ multica agent create \
   --output json
 ```
 
-Use the same pattern for the verifier and any lead, reviewer, security, or
-judge agents. Select model and reasoning settings appropriate to each role;
+Use the same pattern for the Engineering Lead, Builder, Integrator, Verifier,
+Reviewer, Security Adversary, and Judge agents. Select model and reasoning
+settings appropriate to each role;
 they are workspace/runtime configuration, not a repository policy. Do not pass
 secrets through `--custom-env` on a command line: it can expose them through
 shell history or process listings. Use the CLI's stdin or protected-file option

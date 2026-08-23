@@ -4,13 +4,21 @@
   "agent_id": "AGENT-BUILDER-01",
   "name": "builder-01",
   "role": "builder",
+  "instructions_path": ".kiro/agents/builder.md",
   "runtime": { "provider": "kiro", "executable": "kiro-cli", "version": { "minimum": "2.0" } },
   "skills": ["repository-analysis", "git-workflow", "analyze-test-failure"],
   "dependencies": { "system": ["git"], "optional": ["docker"] },
   "authentication": { "required": ["kiro", "github"] },
   "health_checks": ["kiro_cli", "github", "repository_access"],
+  "routing": {
+    "capabilities": ["implementation", "repository-bootstrap", "git-delivery", "repair"],
+    "task_types": ["implementation", "testing"],
+    "priority": 80,
+    "eligible_risk_levels": ["low", "medium", "high"],
+    "max_parallel_tasks": 3
+  },
   "responsibilities": ["Implement approved engineering tasks and report execution evidence."],
   "forbidden_actions": ["Merge or approve its own pull request."],
-  "inputs": ["engineering_task", "repository"],
+  "inputs": ["engineering_task", "repair_request", "repository"],
   "outputs": ["execution_result", "pull_request"]
 }

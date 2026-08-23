@@ -1,0 +1,192 @@
+{
+  "schema_version": "0.1",
+  "governance": {
+    "always_apply": [
+      ".ai/workflows/project-delivery.yaml",
+      ".ai/policies/verification.yaml",
+      ".ai/policies/repair.yaml",
+      "docs/multica/worktree-coordination.md"
+    ],
+    "never_weight": [
+      "permissions",
+      "forbidden_actions",
+      "human_gates",
+      "acceptance_criteria",
+      "verification_requirements",
+      "recursion_limits"
+    ]
+  },
+  "skill_selection": {
+    "weights": {
+      "capability_match": 0.45,
+      "task_type_match": 0.25,
+      "artifact_match": 0.15,
+      "role_match": 0.15
+    },
+    "context_cost_penalty": 0.1,
+    "selected_threshold": 0.55,
+    "max_selected_skills": 4,
+    "required_skills_ignore_threshold": true
+  },
+  "agent_delegation": {
+    "hard_gates": [
+      "role_eligible",
+      "risk_eligible",
+      "required_skills_bound",
+      "authority_sufficient",
+      "runtime_available",
+      "independence_preserved"
+    ],
+    "weights": {
+      "capability_match": 0.35,
+      "task_type_match": 0.2,
+      "required_skill_coverage": 0.3,
+      "risk_match": 0.1,
+      "manifest_priority": 0.05
+    }
+  },
+  "recursion": {
+    "max_depth": 4,
+    "max_children_per_issue": 8,
+    "max_total_descendants": 40,
+    "max_parallel_tasks": 6,
+    "stop_conditions": [
+      "acceptance_criteria_missing",
+      "authority_missing",
+      "human_gate_reached",
+      "policy_conflict",
+      "decomposition_not_independently_verifiable",
+      "recursion_limit_reached",
+      "total_task_limit_reached"
+    ]
+  },
+  "leader_task": {
+    "template_id": "PROJECT-PLANNING",
+    "title": "Plan and govern project delivery",
+    "task_type": "planning",
+    "role": "engineering-lead",
+    "capabilities": ["project-planning", "task-decomposition", "skill-routing", "governance"],
+    "artifacts": ["routing_plan", "engineering_task"],
+    "required_skills": ["project-orchestration", "repository-analysis"],
+    "recursive": true
+  },
+  "stages": [
+    {
+      "name": "repository-bootstrap",
+      "condition": "repository.mode=create",
+      "barrier": true,
+      "tasks": [
+        {
+          "template_id": "REPOSITORY-BOOTSTRAP",
+          "title": "Create and bootstrap the target repository",
+          "task_type": "implementation",
+          "role": "builder",
+          "capabilities": ["repository-bootstrap", "git-delivery", "implementation"],
+          "artifacts": ["repository", "source_changes", "commit"],
+          "required_skills": ["repository-analysis", "git-workflow"],
+          "recursive": false
+        }
+      ]
+    },
+    {
+      "name": "implementation",
+      "condition": "always",
+      "barrier": true,
+      "tasks": [
+        {
+          "template_id": "PROJECT-IMPLEMENTATION",
+          "title": "Implement independently verifiable project slices",
+          "task_type": "implementation",
+          "role": "builder",
+          "capabilities": ["implementation", "git-delivery"],
+          "artifacts": ["source_changes", "tests", "documentation", "commit", "pull_request"],
+          "required_skills": ["repository-analysis", "git-workflow"],
+          "recursive": true
+        }
+      ]
+    },
+    {
+      "name": "integration",
+      "condition": "always",
+      "barrier": true,
+      "tasks": [
+        {
+          "template_id": "PROJECT-INTEGRATION",
+          "title": "Integrate verified child commits",
+          "task_type": "release",
+          "role": "integrator",
+          "capabilities": ["commit-integration", "git-delivery"],
+          "artifacts": ["commit", "pull_request", "evidence_bundle"],
+          "required_skills": ["repository-analysis", "git-workflow"],
+          "recursive": false
+        }
+      ]
+    },
+    {
+      "name": "independent-checks",
+      "condition": "always",
+      "barrier": true,
+      "tasks": [
+        {
+          "template_id": "PROJECT-VERIFICATION",
+          "title": "Verify the exact integration commit",
+          "task_type": "testing",
+          "role": "tester",
+          "capabilities": ["deterministic-verification", "acceptance-evaluation"],
+          "artifacts": ["verification_result", "evidence_bundle"],
+          "required_skills": ["repository-analysis", "run-verification"],
+          "recursive": false
+        },
+        {
+          "template_id": "PROJECT-REVIEW",
+          "title": "Review the exact integration commit",
+          "task_type": "review",
+          "role": "reviewer",
+          "capabilities": ["code-review", "finding-reporting"],
+          "artifacts": ["finding", "evidence_bundle"],
+          "required_skills": ["repository-analysis"],
+          "recursive": false
+        },
+        {
+          "template_id": "PROJECT-SECURITY",
+          "title": "Perform adversarial security review",
+          "task_type": "security",
+          "role": "security",
+          "capabilities": ["security-review", "adversarial-analysis"],
+          "artifacts": ["finding", "evidence_bundle"],
+          "required_skills": ["repository-analysis"],
+          "recursive": false
+        }
+      ]
+    },
+    {
+      "name": "judgment",
+      "condition": "always",
+      "barrier": true,
+      "tasks": [
+        {
+          "template_id": "PROJECT-JUDGMENT",
+          "title": "Judge aggregate project evidence",
+          "task_type": "release",
+          "role": "judge",
+          "capabilities": ["evidence-evaluation", "policy-decision"],
+          "artifacts": ["evidence_bundle", "decision"],
+          "required_skills": ["evidence-reporting"],
+          "recursive": false
+        }
+      ]
+    }
+  ],
+  "conditional_routes": [
+    {
+      "template_id": "PROJECT-REPAIR",
+      "title": "Repair a classified retryable failure",
+      "task_type": "implementation",
+      "role": "builder",
+      "capabilities": ["failure-analysis", "repair"],
+      "artifacts": ["repair_request", "execution_result"],
+      "required_skills": ["analyze-test-failure", "git-workflow"],
+      "recursive": false
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "$schema": "../schemas/project-blueprint.schema.json",
+  "schema_version": "0.1",
+  "project_id": "PROJECT-EXAMPLE-SERVICE",
+  "title": "Example Service",
+  "objective": "Create a small production-ready service from an approved project brief.",
+  "repository": {
+    "mode": "create",
+    "owner": "example-org",
+    "name": "example-service",
+    "visibility": "private",
+    "default_branch": "main"
+  },
+  "requirements": [
+    {
+      "id": "REQ-API",
+      "description": "Expose the approved service API with deterministic validation.",
+      "priority": "must"
+    },
+    {
+      "id": "REQ-OPERATIONS",
+      "description": "Document local development, verification, and rollback procedures.",
+      "priority": "must"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-TESTS",
+      "description": "All repository-defined required checks pass on the integration commit.",
+      "verification": "automated_test",
+      "required": true
+    },
+    {
+      "id": "AC-REVIEW",
+      "description": "Independent review and security analysis have no unresolved blocking findings.",
+      "verification": "agent_review",
+      "required": true
+    }
+  ],
+  "constraints": [
+    "Do not deploy or merge without the configured human gate.",
+    "Keep credentials outside repositories and issue descriptions."
+  ],
+  "risk_level": "medium",
+  "technology": {
+    "languages": ["python"],
+    "frameworks": [],
+    "notes": "The squad may recommend a framework during architecture planning."
+  },
+  "expected_outputs": [
+    "repository",
+    "architecture",
+    "source_changes",
+    "tests",
+    "documentation",
+    "pull_request",
+    "evidence_bundle"
+  ],
+  "execution": {
+    "squad": "Engineering Squad",
+    "max_depth": 3,
+    "max_children_per_issue": 6,
+    "max_parallel_tasks": 4,
+    "authorizations": [
+      "create_multica_project",
+      "create_repository",
+      "register_repository",
+      "create_issues",
+      "create_branches",
+      "push_branches",
+      "open_pull_requests"
+    ],
+    "human_gates": [
+      "product_ambiguity",
+      "permission_expansion",
+      "destructive_change",
+      "production_access",
+      "deployment",
+      "merge"
+    ]
+  },
+  "metadata": {}
+}

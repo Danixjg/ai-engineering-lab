@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/routing-plan.schema.json",
+  "title": "Project Routing Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_id",
+    "blueprint_digest",
+    "status",
+    "governance",
+    "recursion",
+    "leader_task",
+    "stages",
+    "conditional_routes",
+    "gaps"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "const": "0.1" },
+    "project_id": { "type": "string" },
+    "blueprint_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "status": { "enum": ["ready", "needs_human"] },
+    "governance": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "recursion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_depth", "max_children_per_issue", "max_total_descendants", "max_parallel_tasks"],
+      "properties": {
+        "max_depth": { "type": "integer", "minimum": 1 },
+        "max_children_per_issue": { "type": "integer", "minimum": 1 },
+        "max_total_descendants": { "type": "integer", "minimum": 1 },
+        "max_parallel_tasks": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "leader_task": { "$ref": "#/$defs/task" },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stage", "name", "barrier", "tasks"],
+        "properties": {
+          "stage": { "type": "integer", "minimum": 1 },
+          "name": { "type": "string" },
+          "barrier": { "type": "boolean" },
+          "tasks": { "type": "array", "items": { "$ref": "#/$defs/task" }, "minItems": 1 }
+        }
+      }
+    },
+    "conditional_routes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/task" }
+    },
+    "gaps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "template_id",
+        "title",
+        "task_type",
+        "role",
+        "recursive",
+        "agent",
+        "selected_skills"
+      ],
+      "properties": {
+        "template_id": { "type": "string" },
+        "title": { "type": "string" },
+        "task_type": { "type": "string" },
+        "role": { "type": "string" },
+        "recursive": { "type": "boolean" },
+        "agent": { "type": ["object", "null"] },
+        "selected_skills": { "type": "array", "items": { "type": "object" } }
+      }
+    }
+  }
+}

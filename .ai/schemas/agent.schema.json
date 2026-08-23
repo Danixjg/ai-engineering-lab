@@ -42,9 +42,11 @@
     "role": {
       "type": "string",
       "enum": [
+        "engineering-lead",
         "planner",
         "architect",
         "builder",
+        "integrator",
         "tester",
         "reviewer",
         "security",
@@ -90,6 +92,62 @@
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
       "uniqueItems": true
+    },
+
+    "instructions_path": {
+      "type": "string",
+      "pattern": "^[^/].*\\.md$"
+    },
+
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilities",
+        "task_types",
+        "priority",
+        "eligible_risk_levels",
+        "max_parallel_tasks"
+      ],
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "task_types": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "planning",
+              "architecture",
+              "implementation",
+              "testing",
+              "review",
+              "security",
+              "adversarial",
+              "release"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "eligible_risk_levels": {
+          "type": "array",
+          "items": { "enum": ["low", "medium", "high", "critical"] },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "max_parallel_tasks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
     },
 
     "dependencies": {
@@ -150,7 +208,11 @@
         "type": "string",
         "enum": [
           "engineering_task",
+          "project_blueprint",
+          "routing_plan",
           "execution_result",
+          "verification_result",
+          "repair_request",
           "findings",
           "evidence_bundle",
           "repository",
@@ -165,10 +227,14 @@
         "type": "string",
         "enum": [
           "engineering_task",
+          "routing_plan",
           "execution_result",
+          "verification_result",
+          "repair_request",
           "finding",
           "evidence_bundle",
-          "pull_request"
+          "pull_request",
+          "decision"
         ]
       }
     },
