@@ -27,9 +27,13 @@ class MultiEnginTests(unittest.TestCase):
         for agent in agents:
             name = agent.get("name", "<unknown>")
             raw_path = agent.get("instructions_path")
-            if raw_path is None:
-                # instructions_path is optional; skip manifests that omit it
-                continue
+
+            # instructions_path is required: an absent or null value must fail
+            self.assertIsNotNone(
+                raw_path,
+                f"[{name}] instructions_path is missing from the agent manifest — "
+                "every configured agent must declare a non-null instructions_path",
+            )
 
             resolved = (repo_root / raw_path).resolve()
 
