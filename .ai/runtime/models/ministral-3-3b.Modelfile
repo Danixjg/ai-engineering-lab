@@ -1,0 +1,2 @@
+FROM ministral-3:3b
+PARAMETER num_ctx 65536

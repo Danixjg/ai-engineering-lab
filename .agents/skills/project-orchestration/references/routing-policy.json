@@ -5,6 +5,7 @@
       ".ai/workflows/project-delivery.yaml",
       ".ai/policies/verification.yaml",
       ".ai/policies/repair.yaml",
+      ".ai/runtime/model-policy.yaml",
       "docs/multica/worktree-coordination.md"
     ],
     "never_weight": [
@@ -38,9 +39,9 @@
       "independence_preserved"
     ],
     "weights": {
-      "capability_match": 0.35,
-      "task_type_match": 0.2,
-      "required_skill_coverage": 0.3,
+      "capability_match": 0.3,
+      "task_type_match": 0.15,
+      "required_skill_coverage": 0.25,
       "risk_match": 0.1,
       "manifest_priority": 0.05
     }

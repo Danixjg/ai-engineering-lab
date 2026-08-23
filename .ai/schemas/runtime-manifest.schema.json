@@ -4,10 +4,16 @@
   "title": "MultiEngin Runtime Manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "workspace", "compatibility", "runtimes"],
+  "required": [
+    "schema_version",
+    "workspace",
+    "compatibility",
+    "runtimes",
+    "model_backends"
+  ],
   "properties": {
     "$schema": { "type": "string" },
-    "schema_version": { "const": "0.1" },
+    "schema_version": { "const": "0.2" },
     "workspace": {
       "type": "object",
       "additionalProperties": false,
@@ -20,22 +26,52 @@
     "compatibility": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["python", "node"],
+      "required": ["python"],
       "properties": {
-        "python": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
-        "node": { "type": "string", "pattern": "^[0-9]+$" }
+        "python": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" }
       }
     },
     "runtimes": {
       "type": "object",
+      "minProperties": 1,
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["executable", "authentication_check", "installer"],
+        "required": ["executable", "version_pattern", "installer", "configuration", "launch"],
         "properties": {
           "executable": { "type": "string", "minLength": 1 },
-          "authentication_check": { "type": "array", "items": { "type": "string" } },
-          "installer": { "enum": ["kiro_cli", "codex_cli"] }
+          "version_pattern": { "type": "string", "minLength": 1 },
+          "installer": { "enum": ["opencode_cli", "external"] },
+          "configuration": { "type": "string", "minLength": 1 },
+          "launch": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "model_backends": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["executable", "endpoint", "health_check", "server", "installer"],
+        "properties": {
+          "executable": { "type": "string", "minLength": 1 },
+          "endpoint": { "type": "string", "format": "uri" },
+          "health_check": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "server": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "installer": { "enum": ["ollama_cli", "external"] }
         }
       }
     }

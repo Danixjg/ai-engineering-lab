@@ -1,67 +1,104 @@
-# MultiEngin portable runtime
+# MultiEngin local runtime
 
-MultiEngin makes the current computer capable of executing selected agents from
-this Multica Cloud workspace. It is a local convenience layer, not a second
+MultiEngin makes the current computer capable of executing cloud-managed
+Multica agents with local models. It is a portable runtime layer, not a second
 orchestration system.
 
 ```text
-Multica Cloud                         Current machine
--------------                         ---------------
-agents, squads, skills, policies  ->  multiengin start
-workspace state                    ->  local Kiro/Codex runtimes
-                                     ->  Multica daemon and worktrees
+Multica Cloud                       Current machine
+-------------                       ---------------
+agents, squads, skills, issues  ->  OpenCode ACP harness
+                                    -> Ollama local model server
+                                    -> governed Git worktrees
 ```
 
-Multica Cloud remains the source of truth for engineering state. Credentials,
-workspace IDs, server URLs, and runtime paths remain in protected local
-Multica or agent-CLI configuration and must not be committed here.
+OpenCode and Ollama are complementary layers. OpenCode implements the coding
+agent and ACP protocol Multica invokes. Ollama serves the model weights and API;
+it does not replace the agent harness.
+
+Multica Cloud remains the source of truth for issues, squads, skill bindings,
+and execution state. Local runtime paths and process state stay outside Git.
 
 ## Manifests
 
-Each file in `.ai/agents/` describes an agent's runtime, skills, system
-dependencies, required authentication, and health checks. The CLI resolves the
-union of those requirements for the selected agents, so Kiro, Codex, Git, and
-authentication are never provisioned twice.
+Each `.ai/agents/*.yaml` file describes one stable role instance, including its
+OpenCode harness, pinned Ollama model, skills, system dependencies, and health
+checks. Role instructions in `.ai/prompts/` are provider-neutral.
 
-`.ai/runtime/runtime-manifest.yaml` defines portable-runtime compatibility and
-maps provider names to local executable and authentication checks. These files
-use JSON-compatible YAML intentionally: it lets a fresh machine run the CLI
-with only Python's standard library.
+`.ai/runtime/runtime-manifest.yaml` defines the OpenCode and Ollama adapters.
+The repository-root `opencode.json` registers Ollama's OpenAI-compatible local
+endpoint and allowlists the evaluated model portfolio for every task checkout.
+`.ai/runtime/model-policy.yaml` separately defines:
+
+- the OpenCode/Ollama execution stack;
+- resource limits for the current `local-16gb` profile;
+- weighted role-to-model affinity;
+- required model-family diversity and concentration limits;
+- model separation between implementation and independent evaluation.
+
+The default portfolio is:
+
+| Model | Stable roles |
+| --- | --- |
+| `ollama/multica-qwen3.5:2b` | Engineering Lead, Builder, Integrator |
+| `ollama/multica-granite4.1:3b` | Verifier, Security Adversary |
+| `ollama/multica-ministral-3:3b` | Reviewer, Judge |
+
+Each `multica-*` model is a lightweight derived manifest that reuses the
+downloaded upstream weights. The versioned `.ai/runtime/models/*.Modelfile`
+files pin `num_ctx 65536`; the OpenAI-compatible endpoint cannot set context
+size per request.
+
+The host loads one model and runs one agent task at a time. Logical stages may
+contain several tasks, but the execution-capacity limit queues them. The model
+policy caps this small local profile at medium-risk work; high and critical
+risk plans stop at `needs_human`.
 
 ## Commands
 
-Run the repository launcher directly, or add `bin/` to your `PATH` to use
-`multiengin` without a path prefix.
-
 ```bash
-./bin/multiengin start                 # interactively select agents
-./bin/multiengin start builder-01      # provision one agent
 ./bin/multiengin start --all
 ./bin/multiengin doctor --all
 ./bin/multiengin agents --all
+./bin/multiengin reconcile --all
+./bin/multiengin reconcile --all --apply
 ./bin/multiengin update --all
 ./bin/multiengin stop
 ```
 
-`start` checks the selected manifests, requests confirmation, installs missing
-Kiro or Codex CLIs, invokes the required interactive login flows, and starts
-the local Multica daemon. Kiro and Codex are built-in Multica runtime
-providers, so the daemon detects and registers their normal executables; no
-custom runtime profile is created for them. `stop` stops only the local daemon;
-it never stops cloud agents or changes cloud workspace state.
+`start` is idempotent. It installs OpenCode from its official installer when
+missing, exposes it through the user-local executable path that Multica scans,
+links the versioned OpenCode provider config into the user's global OpenCode
+config location so fresh Multica worktrees can resolve local models immediately,
+starts a locally managed Ollama server, pulls each selected model only once,
+builds any missing governed aliases, runs authentication/dependency checks,
+and starts or safely refreshes the Multica daemon. A refresh is refused while
+Multica has an active task.
+The Ollama process uses the context, loaded-model, and parallelism limits in the
+model policy. Ollama itself must be installed through the approved OS package.
 
-`doctor` and `agents` are read-only. `update` first runs `git pull --ff-only`
-to obtain the current manifests, then applies the same selected-agent
-provisioning checks as `start`.
+`reconcile` compares live Multica agents with both the desired OpenCode runtime
+and desired Ollama model. It previews by default, requires exactly one online
+OpenCode runtime when changing harnesses, and refuses to mutate an active
+agent. `--apply` changes the runtime ID and model together.
 
-## Scope boundary
+`doctor` and `agents` are read-only. They verify the OpenCode executable, Ollama
+server, required model inventory, OpenCode provider exposure, GitHub
+authentication, repository access, and system dependencies. `stop` stops the
+Multica daemon and only the Ollama server started by MultiEngin; it does not
+kill an independently managed Ollama service.
 
-MultiEngin establishes the **agent runtime environment** only. It does not
-install application dependencies or globally run project package managers.
-Repositories remain responsible for reproducible application environments
-(for example, dev containers, mise, uv, pnpm, or Poetry). Missing required
-system tools are reported with their owning agent; their OS-specific baseline
-installation remains available through `.infrastructure/bootstrap/`.
+## Reusability and upgrades
 
-The runtime CLIs are clients for hosted providers. Installing Kiro or Codex
-does not download a frontier model onto the machine.
+Do not bind every model or skill to every task. Add a new model as an evaluated
+stable agent variant, assign it role-affinity scores, and preserve the
+separation gates. The routing plan scores eligible agent instances by role,
+capability, required skills, risk, priority, and model affinity, then rejects a
+portfolio that violates concentration or independence constraints.
+
+For a stronger host, add a separately evaluated capacity profile and larger
+tool-capable Ollama models. Do not silently raise parallelism, context, or risk
+ceilings: those settings affect memory safety and governance.
+
+Application dependencies remain the target repository's responsibility (for
+example through dev containers, mise, uv, pnpm, or Poetry).

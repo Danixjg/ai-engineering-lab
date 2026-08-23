@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/model-policy.schema.json",
+  "title": "MultiEngin Local Model Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "execution_stack",
+    "selection",
+    "portfolio",
+    "model_builds",
+    "role_affinity",
+    "separation_constraints",
+    "stage_constraints"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "const": "0.1" },
+    "execution_stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "backend", "capacity"],
+      "properties": {
+        "harness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "protocol_family"],
+          "properties": {
+            "provider": { "type": "string", "minLength": 1 },
+            "protocol_family": { "type": "string", "minLength": 1 }
+          }
+        },
+        "backend": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "endpoint"],
+          "properties": {
+            "provider": { "type": "string", "minLength": 1 },
+            "endpoint": { "type": "string", "format": "uri" }
+          }
+        },
+        "capacity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "profile",
+            "maximum_parallel_tasks",
+            "maximum_loaded_models",
+            "context_tokens",
+            "maximum_risk_level"
+          ],
+          "properties": {
+            "profile": { "type": "string", "minLength": 1 },
+            "maximum_parallel_tasks": { "type": "integer", "minimum": 1 },
+            "maximum_loaded_models": { "type": "integer", "minimum": 1 },
+            "context_tokens": { "type": "integer", "minimum": 16384 },
+            "maximum_risk_level": {
+              "enum": ["low", "medium", "high", "critical"]
+            }
+          }
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["weights"],
+      "properties": {
+        "weights": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model_affinity"],
+          "properties": {
+            "model_affinity": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    },
+    "portfolio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_models", "minimum_distinct_models", "maximum_model_share"],
+      "properties": {
+        "required_models": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 2,
+          "uniqueItems": true
+        },
+        "minimum_distinct_models": { "type": "integer", "minimum": 2 },
+        "maximum_model_share": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "model_builds": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "modelfile"],
+        "properties": {
+          "source": { "type": "string", "minLength": 1 },
+          "modelfile": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "role_affinity": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "separation_constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["left_role", "right_roles"],
+        "properties": {
+          "left_role": { "type": "string", "minLength": 1 },
+          "right_roles": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "stage_constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stage", "minimum_distinct_models"],
+        "properties": {
+          "stage": { "type": "string", "minLength": 1 },
+          "minimum_distinct_models": { "type": "integer", "minimum": 2 }
+        }
+      }
+    }
+  }
+}

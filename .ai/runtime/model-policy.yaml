@@ -1,0 +1,102 @@
+{
+  "$schema": "../schemas/model-policy.schema.json",
+  "schema_version": "0.1",
+  "execution_stack": {
+    "harness": {
+      "provider": "opencode",
+      "protocol_family": "opencode"
+    },
+    "backend": {
+      "provider": "ollama",
+      "endpoint": "http://127.0.0.1:11434"
+    },
+    "capacity": {
+      "profile": "local-16gb",
+      "maximum_parallel_tasks": 1,
+      "maximum_loaded_models": 1,
+      "context_tokens": 65536,
+      "maximum_risk_level": "medium"
+    }
+  },
+  "selection": {
+    "weights": {
+      "model_affinity": 0.15
+    }
+  },
+  "portfolio": {
+    "required_models": [
+      "ollama/multica-granite4.1:3b",
+      "ollama/multica-ministral-3:3b",
+      "ollama/multica-qwen3.5:2b"
+    ],
+    "minimum_distinct_models": 3,
+    "maximum_model_share": 0.5
+  },
+  "model_builds": {
+    "ollama/multica-granite4.1:3b": {
+      "source": "granite4.1:3b",
+      "modelfile": ".ai/runtime/models/granite4.1-3b.Modelfile"
+    },
+    "ollama/multica-ministral-3:3b": {
+      "source": "ministral-3:3b",
+      "modelfile": ".ai/runtime/models/ministral-3-3b.Modelfile"
+    },
+    "ollama/multica-qwen3.5:2b": {
+      "source": "qwen3.5:2b-q4_K_M",
+      "modelfile": ".ai/runtime/models/qwen3.5-2b.Modelfile"
+    }
+  },
+  "role_affinity": {
+    "engineering-lead": {
+      "ollama/multica-qwen3.5:2b": 1.0,
+      "ollama/multica-granite4.1:3b": 0.8,
+      "ollama/multica-ministral-3:3b": 0.75
+    },
+    "builder": {
+      "ollama/multica-qwen3.5:2b": 1.0,
+      "ollama/multica-ministral-3:3b": 0.8,
+      "ollama/multica-granite4.1:3b": 0.75
+    },
+    "integrator": {
+      "ollama/multica-qwen3.5:2b": 1.0,
+      "ollama/multica-granite4.1:3b": 0.85,
+      "ollama/multica-ministral-3:3b": 0.8
+    },
+    "tester": {
+      "ollama/multica-granite4.1:3b": 1.0,
+      "ollama/multica-ministral-3:3b": 0.85,
+      "ollama/multica-qwen3.5:2b": 0.7
+    },
+    "reviewer": {
+      "ollama/multica-ministral-3:3b": 1.0,
+      "ollama/multica-granite4.1:3b": 0.85,
+      "ollama/multica-qwen3.5:2b": 0.7
+    },
+    "security": {
+      "ollama/multica-granite4.1:3b": 1.0,
+      "ollama/multica-ministral-3:3b": 0.85,
+      "ollama/multica-qwen3.5:2b": 0.7
+    },
+    "judge": {
+      "ollama/multica-ministral-3:3b": 1.0,
+      "ollama/multica-granite4.1:3b": 0.9,
+      "ollama/multica-qwen3.5:2b": 0.7
+    }
+  },
+  "separation_constraints": [
+    {
+      "left_role": "builder",
+      "right_roles": ["tester", "reviewer", "security", "judge"]
+    },
+    {
+      "left_role": "integrator",
+      "right_roles": ["judge"]
+    }
+  ],
+  "stage_constraints": [
+    {
+      "stage": "independent-checks",
+      "minimum_distinct_models": 2
+    }
+  ]
+}

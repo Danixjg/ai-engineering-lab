@@ -39,10 +39,12 @@ cp .ai/blueprints/project.example.json project.json
 ./bin/project-blueprint preflight project.json
 ```
 
-The deterministic plan resolves the canonical skill and agent manifests. It
-hard-gates role, risk eligibility, and required skill coverage before applying
-weights. Required skills are always selected. Optional skills must meet the
-configured threshold and the per-task context budget.
+The deterministic plan resolves the canonical skill, agent, runtime, and local
+model policy manifests. It hard-gates role, risk eligibility, required skill
+coverage, model-family diversity, stage diversity, and cross-role model
+separation before declaring the plan ready. Agent scoring includes an explicit
+model-affinity component. Required skills are always selected. Optional skills
+must meet the configured threshold and the per-task context budget.
 
 The routing policy is packaged with the `project-orchestration` skill at
 `.agents/skills/project-orchestration/references/routing-policy.json`. Governance,
@@ -77,8 +79,9 @@ Apply after reviewing the output:
 
 Before either write, the helper performs a live preflight: the daemon must be
 running; the Engineering Lead must lead the named squad; every routed agent
-must be a squad member; and every required workspace skill must already be
-bound. A drifted workspace fails closed before project or issue creation.
+must be a squad member and bound to the online OpenCode harness and planned
+Ollama model; and every required workspace skill must already be bound. A
+drifted workspace fails closed before project or issue creation.
 
 `--create-project` creates a Multica project with the control repository as a
 resource. To use an existing Multica project, replace it with
@@ -120,3 +123,10 @@ Multica skill bindings are agent-wide. Changing a shared agent's bindings for a
 single issue is unsafe when tasks run concurrently. Task-level specialization
 therefore comes from delegation to stable specialist agents and native skill
 selection, not from global binding mutations around a run.
+
+The same rule applies to models. Runtime IDs are resolved at deployment time,
+and shared agents are not switched around a task. Add another stable agent
+instance when a role needs multiple evaluated model candidates; the router
+compares eligible instances using role, capability, skill, risk, priority, and
+model-affinity weights, then applies capacity, portfolio, and independence hard
+gates.

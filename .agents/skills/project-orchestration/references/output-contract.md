@@ -8,6 +8,7 @@ Produce a routing plan containing:
 - `ready` or `needs_human` status;
 - mandatory governance sources;
 - effective recursion and parallelism limits;
+- execution harness, local model backend, model concentration, stage diversity, and separation evidence;
 - the leader task, ordered stages, conditional repair route, and routing gaps;
 - for each task, its role, selected agent, selected skills, scores, and reasons.
 

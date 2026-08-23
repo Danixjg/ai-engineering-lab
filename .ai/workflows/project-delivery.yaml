@@ -40,7 +40,7 @@
     },
     "independent_checks": {
       "agents": ["AGENT-VERIFIER-01", "AGENT-REVIEWER-01", "AGENT-SECURITY-ADVERSARY-01"],
-      "parallel": true,
+      "parallel": "bounded_by_execution_capacity",
       "candidate": "exact_integration_commit",
       "next_on_pass": "judging",
       "next_on_retryable_failure": "repairing",

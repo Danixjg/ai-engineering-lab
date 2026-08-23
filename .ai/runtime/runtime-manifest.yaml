@@ -1,24 +1,29 @@
 {
   "$schema": "../schemas/runtime-manifest.schema.json",
-  "schema_version": "0.1",
+  "schema_version": "0.2",
   "workspace": {
     "source": "multica_cloud",
     "configuration": "local_multica_profile"
   },
   "compatibility": {
-    "python": "3.12",
-    "node": "24"
+    "python": "3.12"
   },
   "runtimes": {
-    "kiro": {
-      "executable": "kiro-cli",
-      "authentication_check": ["whoami"],
-      "installer": "kiro_cli"
-    },
-    "codex": {
-      "executable": "codex",
-      "authentication_check": ["login", "status"],
-      "installer": "codex_cli"
+    "opencode": {
+      "executable": "opencode",
+      "version_pattern": "(?:opencode\\s+)?v?(\\d+(?:\\.\\d+){1,2})",
+      "installer": "opencode_cli",
+      "configuration": "opencode.json",
+      "launch": ["acp"]
+    }
+  },
+  "model_backends": {
+    "ollama": {
+      "executable": "ollama",
+      "endpoint": "http://127.0.0.1:11434",
+      "health_check": ["list"],
+      "server": ["serve"],
+      "installer": "ollama_cli"
     }
   }
 }

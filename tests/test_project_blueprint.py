@@ -33,6 +33,16 @@ class ProjectBlueprintTests(unittest.TestCase):
 
         self.assertEqual(plan["status"], "ready")
         self.assertEqual(plan["leader_task"]["agent"]["name"], "engineering-lead-01")
+        self.assertEqual(plan["schema_version"], "0.3")
+        self.assertEqual(plan["model_portfolio"]["distinct_model_count"], 3)
+        self.assertEqual(
+            plan["model_portfolio"]["stage_diversity"]["independent-checks"],
+            [
+                "ollama/multica-granite4.1:3b",
+                "ollama/multica-ministral-3:3b",
+            ],
+        )
+        self.assertEqual(plan["recursion"]["max_parallel_tasks"], 1)
         self.assertEqual(
             [stage["name"] for stage in plan["stages"]],
             [
@@ -120,10 +130,26 @@ class ProjectBlueprintTests(unittest.TestCase):
     def test_live_preflight_checks_squad_topology_and_skill_bindings(self) -> None:
         plan = project_blueprint.build_plan(self.blueprint)
         requirements = project_blueprint.routed_agent_requirements(plan)
+        providers = project_blueprint.routed_agent_providers(plan)
+        models = project_blueprint.routed_agent_models(plan)
+        runtime_ids = {
+            provider: f"runtime-{provider}" for provider in sorted(set(providers.values()))
+        }
         agents = []
         for index, name in enumerate(sorted(requirements), start=1):
-            agents.append({"id": f"agent-{index}", "name": name})
+            agents.append(
+                {
+                    "id": f"agent-{index}",
+                    "name": name,
+                    "runtime_id": runtime_ids[providers[name]],
+                    "model": models[name],
+                }
+            )
         agents_by_name = {agent["name"]: agent for agent in agents}
+        runtimes = [
+            {"id": runtime_id, "provider": provider, "status": "online"}
+            for provider, runtime_id in runtime_ids.items()
+        ]
         skills = [
             {"id": f"skill-{index}", "name": name}
             for index, name in enumerate(
@@ -139,6 +165,8 @@ class ProjectBlueprintTests(unittest.TestCase):
                 return {"status": "running"}
             if command[1:3] == ["agent", "list"]:
                 return agents
+            if command[1:3] == ["runtime", "list"]:
+                return runtimes
             if command[1:3] == ["squad", "list"]:
                 return [{"id": "squad-1", "name": "Engineering Squad", "leader_id": lead_id}]
             if command[1:4] == ["squad", "member", "list"]:
@@ -155,6 +183,37 @@ class ProjectBlueprintTests(unittest.TestCase):
             errors = project_blueprint.preflight_live("Engineering Squad", plan)
 
         self.assertEqual(errors, [])
+
+    def test_model_portfolio_rejects_model_concentration(self) -> None:
+        plan = project_blueprint.build_plan(self.blueprint)
+        concentrated = copy.deepcopy(plan)
+        tasks = [concentrated["leader_task"]]
+        tasks.extend(
+            task for stage in concentrated["stages"] for task in stage["tasks"]
+        )
+        tasks.extend(concentrated["conditional_routes"])
+        for task in tasks:
+            task["agent"]["runtime"]["model"] = "ollama/multica-qwen3.5:2b"
+
+        _, gaps = project_blueprint.evaluate_model_portfolio(
+            concentrated["leader_task"],
+            concentrated["stages"],
+            concentrated["conditional_routes"],
+            project_blueprint.load_document(project_blueprint.MODEL_POLICY),
+        )
+
+        self.assertTrue(any("missing required models" in gap for gap in gaps))
+        self.assertTrue(any("model portfolio share" in gap for gap in gaps))
+        self.assertTrue(any("model separation violated" in gap for gap in gaps))
+
+    def test_local_profile_routes_high_risk_work_to_human(self) -> None:
+        blueprint = copy.deepcopy(self.blueprint)
+        blueprint["risk_level"] = "high"
+
+        plan = project_blueprint.build_plan(blueprint)
+
+        self.assertEqual(plan["status"], "needs_human")
+        self.assertTrue(any("supports risk through medium" in gap for gap in plan["gaps"]))
 
     def test_render_embeds_the_normalized_contract_and_plan(self) -> None:
         plan = project_blueprint.build_plan(self.blueprint)

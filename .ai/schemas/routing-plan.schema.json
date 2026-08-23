@@ -11,6 +11,7 @@
     "status",
     "governance",
     "recursion",
+    "model_portfolio",
     "leader_task",
     "stages",
     "conditional_routes",
@@ -18,7 +19,7 @@
   ],
   "properties": {
     "$schema": { "type": "string" },
-    "schema_version": { "const": "0.1" },
+    "schema_version": { "const": "0.3" },
     "project_id": { "type": "string" },
     "blueprint_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "status": { "enum": ["ready", "needs_human"] },
@@ -37,6 +38,89 @@
         "max_children_per_issue": { "type": "integer", "minimum": 1 },
         "max_total_descendants": { "type": "integer", "minimum": 1 },
         "max_parallel_tasks": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "model_portfolio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "backend",
+        "capacity",
+        "models",
+        "distinct_model_count",
+        "minimum_distinct_models",
+        "observed_maximum_model_share",
+        "maximum_model_share",
+        "stage_diversity"
+      ],
+      "properties": {
+        "harness": {
+          "type": "object",
+          "required": ["provider", "protocol_family"],
+          "properties": {
+            "provider": { "type": "string" },
+            "protocol_family": { "type": "string" }
+          }
+        },
+        "backend": {
+          "type": "object",
+          "required": ["provider", "endpoint"],
+          "properties": {
+            "provider": { "type": "string" },
+            "endpoint": { "type": "string" }
+          }
+        },
+        "capacity": {
+          "type": "object",
+          "required": [
+            "profile",
+            "maximum_parallel_tasks",
+            "maximum_loaded_models",
+            "context_tokens",
+            "maximum_risk_level",
+            "requested_parallel_tasks",
+            "effective_parallel_tasks"
+          ],
+          "properties": {
+            "profile": { "type": "string" },
+            "maximum_parallel_tasks": { "type": "integer", "minimum": 1 },
+            "maximum_loaded_models": { "type": "integer", "minimum": 1 },
+            "context_tokens": { "type": "integer", "minimum": 16384 },
+            "maximum_risk_level": { "type": "string" },
+            "requested_parallel_tasks": { "type": "integer", "minimum": 1 },
+            "effective_parallel_tasks": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "models": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "distinct_model_count": { "type": "integer", "minimum": 1 },
+        "minimum_distinct_models": { "type": "integer", "minimum": 2 },
+        "observed_maximum_model_share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "maximum_model_share": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "stage_diversity": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          }
+        }
       }
     },
     "leader_task": { "$ref": "#/$defs/task" },

@@ -12,13 +12,12 @@ credential, or other instance secret.
 
 | Path | Purpose |
 | --- | --- |
-| `.kiro/agents/` | Builder and verifier role instructions. |
-| `.ai/prompts/` | Provider-neutral lead, integration, review, security, and judge instructions. |
+| `.ai/prompts/` | Provider-neutral instructions for every engineering role. |
 | `.ai/schemas/` | Contracts for tasks, results, findings, and workflow state. |
 | `.ai/workflows/` | The engineering-task lifecycle. |
 | `.ai/blueprints/` | Portable project-intent examples for new or existing repositories. |
-| `.ai/agents/` | Canonical runtime, skill, dependency, and health requirements for each agent. |
-| `.ai/runtime/` | Portable-runtime compatibility and provider adapters. |
+| `.ai/agents/` | Stable runtime-bound agent instances, role eligibility, skills, dependencies, and health requirements. |
+| `.ai/runtime/` | OpenCode/Ollama adapters plus the weighted local-model portfolio and independence policy. |
 | `.agents/skills/` | Canonical sources for reusable agent skills. |
 | `docs/multica/` | Multica skill bindings and [worktree coordination rules](docs/multica/worktree-coordination.md). |
 | `bin/multiengin` | Portable local-runtime launcher for the current machine. |
@@ -52,8 +51,8 @@ After reviewing the plan, add `--apply` to create the Multica project, retain
 this repository as its control resource, assign the parent issue to the
 configured squad, and start the leader. Omit `--start` to create the issue in
 `backlog` without enqueueing work. The apply path first checks the live daemon,
-squad leader and membership, agents, and required skill bindings; drift blocks
-submission before any write.
+squad leader and membership, agents, OpenCode runtime bindings, pinned Ollama
+models, and required skill bindings; drift blocks submission before any write.
 
 ```bash
 ./bin/project-blueprint submit project.json \
@@ -110,59 +109,67 @@ If the workspace already exists, omit creation and switch to its existing slug
 or ID. The workspace owner adds the relevant members and grants only the
 permissions required for their roles.
 
-### 2. Run the team's own model runtime
+### 2. Run the local model stack
 
-This setup deliberately uses models selected and funded by the workspace rather
-than hard-coding a provider model or storing a provider key in this repository.
-The runtime operator installs and authenticates the compatible local agent CLI
-on each execution machine, then starts the Multica daemon that invokes it:
-
-```bash
-multica daemon start --workspaces-root <task-workspaces-directory>
-```
-
-For a non-default or internally hosted agent CLI, create a runtime profile and
-pin its executable path on each runner as needed:
+OpenCode is the Multica-compatible coding-agent harness. Ollama is the local
+model server behind it; it is not used as a standalone coding agent. The
+portable launcher installs OpenCode when needed, starts a managed Ollama
+server, builds the governed 65K-context aliases from downloaded weights, and
+starts the Multica daemon:
 
 ```bash
-multica runtime profile create \
-  --display-name "<team runtime>" \
-  --command-name <agent-cli-command> \
-  --protocol-family <supported-protocol> \
-  --output json
-multica runtime profile set-path <runtime-profile-id> \
-  --path <absolute-path-to-agent-cli>
+./bin/multiengin start --all
 ```
 
-The profile's protocol family and command must be supported by the installed
-Multica version. Keep provider credentials in the runtime's approved secret
-store or local protected configuration; never place them in Git, agent
-instructions, shell history, or task evidence.
+The current `local-16gb` capacity profile loads at most one model and runs one
+agent task at a time with a 65,536-token context. A Project Blueprint may ask
+for more parallelism, but the deterministic plan safely caps it to local
+capacity. High and critical-risk work remains `needs_human` until an evaluated
+local profile explicitly raises that ceiling.
 
-### 3. Make the model choice explicit per agent
+### 3. Reconcile the local model portfolio
 
-List the runtimes available to the workspace, choose a model ID from the
-selected runtime's catalog, and create each agent with that explicit model. A
-model choice is therefore auditable and can vary by role without changing this
-repository.
+`.ai/runtime/model-policy.yaml` separates the execution harness, model backend,
+capacity, role-to-model affinity, and independence rules. Agent manifests pin
+the desired model while live runtime IDs remain machine/workspace state.
+
+| Ollama model | Roles |
+| --- | --- |
+| `multica-qwen3.5:2b` | Engineering Lead, Builder, Integrator |
+| `multica-granite4.1:3b` | Verifier, Security Adversary |
+| `multica-ministral-3:3b` | Reviewer, Judge |
+
+These aliases reuse the upstream model weights. Their versioned Modelfiles pin
+`num_ctx 65536`, because an OpenAI-compatible request cannot change Ollama's
+context size at runtime.
+
+Preview drift between the manifests and the current Multica workspace, then
+apply only when every affected agent is idle:
+
+```bash
+./bin/multiengin reconcile --all
+./bin/multiengin reconcile --all --apply
+```
+
+The apply command resolves the online OpenCode runtime, pins each declared
+Ollama model, and refuses to rebind an active agent. This avoids task-time
+mutation of shared instances:
 
 ```bash
 multica runtime list --output json
 multica agent create \
   --name "Builder-01" \
-  --runtime-id <runtime-id> \
-  --model <workspace-owned-model-id> \
-  --instructions "<contents of .kiro/agents/builder.md>" \
+  --runtime-id <opencode-runtime-id> \
+  --model ollama/multica-qwen3.5:2b \
+  --instructions "<contents of .ai/prompts/builder.md>" \
   --output json
 ```
 
-Use the same pattern for the Engineering Lead, Builder, Integrator, Verifier,
-Reviewer, Security Adversary, and Judge agents. Select model and reasoning
-settings appropriate to each role;
-they are workspace/runtime configuration, not a repository policy. Do not pass
-secrets through `--custom-env` on a command line: it can expose them through
-shell history or process listings. Use the CLI's stdin or protected-file option
-when custom environment values are unavoidable.
+Use the same pattern when initially creating an agent that reconciliation
+reports as missing. Model families and independence are repository policy;
+runtime IDs and local paths are machine/workspace configuration. Do not put
+credentials or private endpoints in the repository, shell history, or task
+evidence.
 
 ### 4. Register the repository and import shared skills
 
@@ -222,9 +229,10 @@ environment:
 ./bin/multiengin start builder-01
 ./bin/multiengin agents --all
 ./bin/multiengin doctor --all
+./bin/multiengin reconcile --all
 ```
 
-MultiEngin installs agent **CLIs/runtimes**, not hosted frontier models. It
-leaves application dependencies to each repository's own reproducible project
-environment. The lower-level `.infrastructure/verify-worker.sh` remains useful
-when validating a full host against the shared Python/Node compatibility line.
+MultiEngin provisions the OpenCode harness and the declared Ollama model
+portfolio. It leaves application dependencies to each target repository's own
+reproducible project environment. The lower-level
+`.infrastructure/verify-worker.sh` remains useful when validating a full host.

@@ -5,7 +5,10 @@
 - [x] Agent-manifest and runtime-manifest schemas
 - [x] Agent dependency resolver and deduplicated plan
 - [x] Interactive selection and targeted `start` command
-- [x] Kiro/Codex runtime installation adapters
+- [x] OpenCode ACP harness and Ollama backend adapters and health checks
+- [x] Weighted local-model portfolio, concentration cap, and separation gates
+- [x] Resource-aware local capacity and risk ceilings
+- [x] Dry-run-first live runtime/model reconciliation
 - [x] Authentication and local health detection
 - [x] Multica daemon lifecycle (`start` and `stop`)
 - [x] `doctor`, `agents`, and `update` commands
@@ -31,6 +34,6 @@ checks.
 - [x] Packaged `project-orchestration` skill
 - [x] Dry-run-first Multica project/issue submission helper
 - [x] Staged recursive project-delivery workflow
-- [ ] Desired-state reconciliation for agents, instructions, squads, and skill
-      bindings in a live Multica workspace
+- [ ] Desired-state reconciliation for agent creation, instructions, squads,
+      and skill bindings in a live Multica workspace (runtime bindings complete)
 - [ ] Historical routing utility derived from verified outcomes

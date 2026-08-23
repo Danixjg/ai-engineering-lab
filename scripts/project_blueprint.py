@@ -17,6 +17,7 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[1]
 AGENTS_DIR = ROOT / ".ai" / "agents"
 SKILL_MANIFEST = ROOT / ".ai" / "skills" / "manifest.yaml"
+MODEL_POLICY = ROOT / ".ai" / "runtime" / "model-policy.yaml"
 ROUTING_POLICY = (
     ROOT
     / ".agents"
@@ -319,7 +320,11 @@ def skill_score(
 
 
 def agent_score(
-    agent: dict[str, Any], task: dict[str, Any], risk_level: str, policy: dict[str, Any]
+    agent: dict[str, Any],
+    task: dict[str, Any],
+    risk_level: str,
+    policy: dict[str, Any],
+    model_policy: dict[str, Any],
 ) -> tuple[float, dict[str, float]] | None:
     if agent.get("role") != task["role"]:
         return None
@@ -336,8 +341,16 @@ def agent_score(
         "required_skill_coverage": overlap(required_skills, bound_skills),
         "risk_match": 1.0,
         "manifest_priority": float(routing.get("priority", 0)) / 100.0,
+        "model_affinity": float(
+            model_policy.get("role_affinity", {})
+            .get(task["role"], {})
+            .get(agent.get("runtime", {}).get("model"), 0.0)
+        ),
     }
-    weights = policy["agent_delegation"]["weights"]
+    weights = {
+        **policy["agent_delegation"]["weights"],
+        **model_policy["selection"]["weights"],
+    }
     score = sum(components[key] * weights[key] for key in weights)
     return round(score, 4), {key: round(value, 4) for key, value in components.items()}
 
@@ -347,10 +360,11 @@ def choose_agent(
     task: dict[str, Any],
     risk_level: str,
     policy: dict[str, Any],
+    model_policy: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, str | None]:
     candidates: list[tuple[float, str, dict[str, Any], dict[str, float]]] = []
     for agent in agents:
-        scored = agent_score(agent, task, risk_level, policy)
+        scored = agent_score(agent, task, risk_level, policy, model_policy)
         if scored is None:
             continue
         score, components = scored
@@ -366,6 +380,11 @@ def choose_agent(
         "name": agent["name"],
         "score": score,
         "score_breakdown": components,
+        "runtime": {
+            "provider": agent["runtime"]["provider"],
+            "executable": agent["runtime"]["executable"],
+            "model": agent["runtime"]["model"],
+        },
         "runtime_check_required": True,
     }, None
 
@@ -413,10 +432,13 @@ def route_task(
     agents: list[dict[str, Any]],
     catalog: dict[str, Any],
     policy: dict[str, Any],
+    model_policy: dict[str, Any],
     risk_level: str,
     remaining_depth: int,
 ) -> tuple[dict[str, Any], list[str]]:
-    selected_agent, agent_gap = choose_agent(agents, template, risk_level, policy)
+    selected_agent, agent_gap = choose_agent(
+        agents, template, risk_level, policy, model_policy
+    )
     agent_manifest = next(
         (agent for agent in agents if selected_agent and agent["agent_id"] == selected_agent["agent_id"]),
         None,
@@ -449,8 +471,122 @@ def condition_matches(condition: str, blueprint: dict[str, Any]) -> bool:
     raise BlueprintError(f"unsupported routing condition: {condition}")
 
 
+def task_sequence(
+    leader_task: dict[str, Any],
+    stages: list[dict[str, Any]],
+    conditional_routes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    tasks = [leader_task]
+    tasks.extend(task for stage in stages for task in stage["tasks"])
+    tasks.extend(conditional_routes)
+    return tasks
+
+
+def evaluate_model_portfolio(
+    leader_task: dict[str, Any],
+    stages: list[dict[str, Any]],
+    conditional_routes: list[dict[str, Any]],
+    policy: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Summarize and hard-gate the harness/backend/model execution stack."""
+    agents: dict[str, dict[str, Any]] = {}
+    roles: dict[str, set[str]] = {}
+    harness_provider = policy["execution_stack"]["harness"]["provider"]
+    for task in task_sequence(leader_task, stages, conditional_routes):
+        agent = task.get("agent")
+        if not agent:
+            continue
+        model = agent.get("runtime", {}).get("model")
+        if not isinstance(model, str) or not model:
+            continue
+        agents[agent["agent_id"]] = agent
+        roles.setdefault(task["role"], set()).add(model)
+
+    models: dict[str, list[str]] = {}
+    for agent in agents.values():
+        model = agent["runtime"]["model"]
+        models.setdefault(model, []).append(agent["name"])
+    models = {
+        model: sorted(names) for model, names in sorted(models.items())
+    }
+    total = len(agents)
+    observed_share = max((len(names) / total for names in models.values()), default=0.0)
+    stage_diversity = {
+        stage["name"]: sorted(
+            {
+                task["agent"]["runtime"]["model"]
+                for task in stage["tasks"]
+                if task.get("agent")
+            }
+        )
+        for stage in stages
+    }
+    portfolio_policy = policy["portfolio"]
+    summary = {
+        "harness": policy["execution_stack"]["harness"],
+        "backend": policy["execution_stack"]["backend"],
+        "capacity": policy["execution_stack"]["capacity"],
+        "models": models,
+        "distinct_model_count": len(models),
+        "minimum_distinct_models": portfolio_policy["minimum_distinct_models"],
+        "observed_maximum_model_share": round(observed_share, 4),
+        "maximum_model_share": portfolio_policy["maximum_model_share"],
+        "stage_diversity": stage_diversity,
+    }
+
+    gaps: list[str] = []
+    invalid_harnesses = {
+        agent["runtime"].get("provider")
+        for agent in agents.values()
+        if agent["runtime"].get("provider") != harness_provider
+    }
+    if invalid_harnesses:
+        gaps.append(
+            f"local model stack requires {harness_provider}; found: "
+            + ", ".join(sorted(str(value) for value in invalid_harnesses))
+        )
+    missing = set(portfolio_policy["required_models"]) - set(models)
+    if missing:
+        gaps.append(
+            "model portfolio is missing required models: "
+            + ", ".join(sorted(missing))
+        )
+    minimum = portfolio_policy["minimum_distinct_models"]
+    if len(models) < minimum:
+        gaps.append(
+            f"model portfolio has {len(models)} distinct models; requires {minimum}"
+        )
+    maximum = float(portfolio_policy["maximum_model_share"])
+    if observed_share > maximum:
+        gaps.append(
+            f"model portfolio share {observed_share:.4f} exceeds {maximum:.4f}"
+        )
+
+    for constraint in policy.get("separation_constraints", []):
+        left_role = constraint["left_role"]
+        left_models = roles.get(left_role, set())
+        for right_role in constraint["right_roles"]:
+            shared = left_models & roles.get(right_role, set())
+            if shared:
+                gaps.append(
+                    f"model separation violated for {left_role} and {right_role}: "
+                    + ", ".join(sorted(shared))
+                )
+
+    for constraint in policy.get("stage_constraints", []):
+        stage_name = constraint["stage"]
+        observed = len(stage_diversity.get(stage_name, []))
+        required = constraint["minimum_distinct_models"]
+        if observed < required:
+            gaps.append(
+                f"stage {stage_name} has {observed} models; requires {required}"
+            )
+    return summary, gaps
+
+
 def build_plan(blueprint: dict[str, Any]) -> dict[str, Any]:
     policy = load_document(ROUTING_POLICY)
+    model_policy = load_document(MODEL_POLICY)
     errors = validate_blueprint(blueprint, policy)
     if errors:
         raise BlueprintError("invalid Project Blueprint:\n- " + "\n- ".join(errors))
@@ -459,6 +595,13 @@ def build_plan(blueprint: dict[str, Any]) -> dict[str, Any]:
     risk = blueprint["risk_level"]
     depth = blueprint["execution"]["max_depth"]
     gaps: list[str] = []
+    capacity = model_policy["execution_stack"]["capacity"]
+    maximum_risk = capacity["maximum_risk_level"]
+    if RISK_LEVELS.index(risk) > RISK_LEVELS.index(maximum_risk):
+        gaps.append(
+            f"local model profile {capacity['profile']} supports risk through "
+            f"{maximum_risk}; {risk} requires human or stronger evaluated models"
+        )
 
     authorizations = set(blueprint["execution"]["authorizations"])
     if "create_issues" not in authorizations:
@@ -469,7 +612,7 @@ def build_plan(blueprint: dict[str, Any]) -> dict[str, Any]:
                 gaps.append(f"new repository delivery requires {authorization} authorization")
 
     leader_task, task_gaps = route_task(
-        policy["leader_task"], agents, catalog, policy, risk, depth
+        policy["leader_task"], agents, catalog, policy, model_policy, risk, depth
     )
     gaps.extend(task_gaps)
     stages: list[dict[str, Any]] = []
@@ -479,7 +622,9 @@ def build_plan(blueprint: dict[str, Any]) -> dict[str, Any]:
             continue
         tasks: list[dict[str, Any]] = []
         for template in stage["tasks"]:
-            task, task_gaps = route_task(template, agents, catalog, policy, risk, depth - 1)
+            task, task_gaps = route_task(
+                template, agents, catalog, policy, model_policy, risk, depth - 1
+            )
             tasks.append(task)
             gaps.extend(task_gaps)
         stages.append(
@@ -494,14 +639,28 @@ def build_plan(blueprint: dict[str, Any]) -> dict[str, Any]:
 
     conditional: list[dict[str, Any]] = []
     for template in policy.get("conditional_routes", []):
-        task, task_gaps = route_task(template, agents, catalog, policy, risk, 0)
+        task, task_gaps = route_task(
+            template, agents, catalog, policy, model_policy, risk, 0
+        )
         conditional.append(task)
         gaps.extend(task_gaps)
+
+    model_portfolio, model_gaps = evaluate_model_portfolio(
+        leader_task, stages, conditional, model_policy
+    )
+    requested_parallel = blueprint["execution"]["max_parallel_tasks"]
+    effective_parallel = min(requested_parallel, capacity["maximum_parallel_tasks"])
+    model_portfolio["capacity"] = {
+        **model_portfolio["capacity"],
+        "requested_parallel_tasks": requested_parallel,
+        "effective_parallel_tasks": effective_parallel,
+    }
+    gaps.extend(model_gaps)
 
     unique_gaps = sorted(set(gaps))
     return {
         "$schema": ".ai/schemas/routing-plan.schema.json",
-        "schema_version": "0.1",
+        "schema_version": "0.3",
         "project_id": blueprint["project_id"],
         "blueprint_digest": blueprint_digest(blueprint),
         "status": "needs_human" if unique_gaps else "ready",
@@ -510,8 +669,9 @@ def build_plan(blueprint: dict[str, Any]) -> dict[str, Any]:
             "max_depth": depth,
             "max_children_per_issue": blueprint["execution"]["max_children_per_issue"],
             "max_total_descendants": policy["recursion"]["max_total_descendants"],
-            "max_parallel_tasks": blueprint["execution"]["max_parallel_tasks"],
+            "max_parallel_tasks": effective_parallel,
         },
+        "model_portfolio": model_portfolio,
         "leader_task": leader_task,
         "stages": stages,
         "conditional_routes": conditional,
@@ -606,6 +766,46 @@ def routed_agent_requirements(plan: dict[str, Any]) -> dict[str, set[str]]:
     return requirements
 
 
+def routed_agent_providers(plan: dict[str, Any]) -> dict[str, str]:
+    providers: dict[str, str] = {}
+    tasks = [plan["leader_task"]]
+    tasks.extend(task for stage in plan["stages"] for task in stage["tasks"])
+    tasks.extend(plan.get("conditional_routes", []))
+    for task in tasks:
+        agent = task.get("agent")
+        if not agent:
+            continue
+        provider = agent.get("runtime", {}).get("provider")
+        if not isinstance(provider, str) or not provider:
+            continue
+        previous = providers.setdefault(agent["name"], provider)
+        if previous != provider:
+            raise BlueprintError(
+                f"routing plan assigns conflicting providers to {agent['name']}"
+            )
+    return providers
+
+
+def routed_agent_models(plan: dict[str, Any]) -> dict[str, str]:
+    models: dict[str, str] = {}
+    tasks = [plan["leader_task"]]
+    tasks.extend(task for stage in plan["stages"] for task in stage["tasks"])
+    tasks.extend(plan.get("conditional_routes", []))
+    for task in tasks:
+        agent = task.get("agent")
+        if not agent:
+            continue
+        model = agent.get("runtime", {}).get("model")
+        if not isinstance(model, str) or not model:
+            continue
+        previous = models.setdefault(agent["name"], model)
+        if previous != model:
+            raise BlueprintError(
+                f"routing plan assigns conflicting models to {agent['name']}"
+            )
+    return models
+
+
 def preflight_live(squad_name: str, plan: dict[str, Any]) -> list[str]:
     """Check the live runtime, squad, agents, and bindings before a write."""
     errors: list[str] = []
@@ -618,9 +818,43 @@ def preflight_live(squad_name: str, plan: dict[str, Any]) -> list[str]:
     )
     agents_by_name = {agent.get("name"): agent for agent in agents if agent.get("name")}
     required = routed_agent_requirements(plan)
+    desired_providers = routed_agent_providers(plan)
+    desired_models = routed_agent_models(plan)
     for name in sorted(required):
         if name not in agents_by_name:
             errors.append(f"required live agent is missing: {name}")
+
+    runtimes = collection(
+        run_multica(["multica", "runtime", "list", "--output", "json"]),
+        "runtimes",
+    )
+    runtimes_by_id = {
+        runtime.get("id"): runtime for runtime in runtimes if runtime.get("id")
+    }
+    for name, expected_provider in sorted(desired_providers.items()):
+        agent = agents_by_name.get(name)
+        if not agent:
+            continue
+        runtime = runtimes_by_id.get(agent.get("runtime_id"))
+        if runtime is None:
+            errors.append(f"{name} has no resolvable live runtime binding")
+            continue
+        actual_provider = runtime.get("provider")
+        if actual_provider != expected_provider:
+            errors.append(
+                f"{name} is bound to {actual_provider or 'unknown'}; "
+                f"blueprint requires {expected_provider}"
+            )
+        if runtime.get("status") != "online":
+            errors.append(
+                f"{name} runtime {expected_provider} is {runtime.get('status') or 'unknown'}"
+            )
+        expected_model = desired_models.get(name)
+        if expected_model and agent.get("model") != expected_model:
+            errors.append(
+                f"{name} model is {agent.get('model') or 'default'}; "
+                f"blueprint requires {expected_model}"
+            )
 
     squads = collection(
         run_multica(["multica", "squad", "list", "--output", "json"]), "squads"

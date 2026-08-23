@@ -38,8 +38,10 @@ missing product decision.
 5. Create staged child issues. Give each issue one owner, one repository/ref,
    bounded scope, acceptance criteria, expected outputs, dependencies, selected
    skills, and its remaining recursion budget.
-6. Delegate by role and skill coverage. Do not change a shared agent's global
-   skill bindings to tailor one task; select an already-compatible agent.
+6. Delegate by role, skill coverage, and the local model portfolio in
+   `.ai/runtime/model-policy.yaml`. Do not change a shared agent's global
+   skill or runtime bindings to tailor one task; select an already-compatible
+   stable agent instance.
 7. Treat each stage as a barrier. Integration consumes committed SHAs, and all
    independent checks inspect the same integration commit.
 8. On retryable failure, create only the bounded repair route allowed by policy.
