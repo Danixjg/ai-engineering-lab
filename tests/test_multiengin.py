@@ -17,6 +17,51 @@ SPEC.loader.exec_module(multiengin)
 
 
 class MultiEnginTests(unittest.TestCase):
+    def test_instruction_files_exist_and_are_non_blank(self) -> None:
+        """Every agent manifest that declares instructions_path must point to a
+        file that resolves inside the repository, exists as a regular file, and
+        contains at least one non-whitespace character.
+        """
+        repo_root = multiengin.ROOT
+        agents = multiengin.manifests()
+        for agent in agents:
+            name = agent.get("name", "<unknown>")
+            raw_path = agent.get("instructions_path")
+            if raw_path is None:
+                # instructions_path is optional; skip manifests that omit it
+                continue
+
+            resolved = (repo_root / raw_path).resolve()
+
+            # Must resolve inside the repository (no path-traversal escapes)
+            try:
+                resolved.relative_to(repo_root)
+            except ValueError:
+                self.fail(
+                    f"[{name}] instructions_path '{raw_path}' resolves outside "
+                    f"the repository root ({repo_root})"
+                )
+
+            # Must exist and be a regular file
+            self.assertTrue(
+                resolved.exists(),
+                f"[{name}] instructions_path '{raw_path}' does not exist "
+                f"(resolved: {resolved})",
+            )
+            self.assertTrue(
+                resolved.is_file(),
+                f"[{name}] instructions_path '{raw_path}' is not a regular file "
+                f"(resolved: {resolved})",
+            )
+
+            # Must contain non-whitespace text
+            content = resolved.read_text(encoding="utf-8")
+            self.assertTrue(
+                content.strip(),
+                f"[{name}] instructions_path '{raw_path}' is empty or contains "
+                "only whitespace — every agent must have a non-blank instruction file",
+            )
+
     def test_manifests_cover_the_configured_agents(self) -> None:
         agents = multiengin.manifests()
         self.assertEqual(
