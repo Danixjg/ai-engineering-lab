@@ -1,6 +1,6 @@
 {
   "$schema": "../schemas/agent.schema.json",
-  "schema_version": "0.3",
+  "schema_version": "0.4",
   "agent_id": "AGENT-JUDGE-01",
   "name": "judge-01",
   "role": "judge",
@@ -10,7 +10,8 @@
     "version": { "minimum": "0.149" },
     "requirements": {
       "runtime_mode": "local",
-      "capabilities": ["agent-skill-v1", "execution-manifest-v1", "local-worktree-v1", "rpc-v1", "skill-bundles-v1"]
+      "capabilities": ["agent-skill-v1", "execution-manifest-v1", "local-worktree-v1", "rpc-v1", "skill-bundles-v1"],
+      "model_strategy": "runtime_default"
     }
   },
   "skills": ["evidence-reporting"],
@@ -19,6 +20,6 @@
   "health_checks": ["codex_cli", "github", "repository_access"],
   "responsibilities": ["Evaluate evidence and make an approval recommendation."],
   "forbidden_actions": ["Merge pull requests or modify the candidate implementation."],
-  "inputs": ["engineering_task", "evidence_bundle", "repository"],
-  "outputs": ["finding", "evidence_bundle"]
+  "inputs": ["engineering_task", "integration_result", "verification_result", "review_result", "findings", "evidence_bundle", "repository"],
+  "outputs": ["evidence_bundle"]
 }

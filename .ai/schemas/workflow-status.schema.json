@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/workflow-status.schema.json",
+  "title": "MultiEngin Workflow Status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "generated_at", "checks", "agents"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "0.1" },
+    "status": { "type": "string", "enum": ["ready", "blocked"] },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "workspace": { "type": ["string", "null"] },
+    "checks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/check" }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agent_id", "name", "status", "checks"],
+        "properties": {
+          "agent_id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["ready", "blocked"] },
+          "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_id", "name", "category", "status", "blocking", "detail"],
+      "properties": {
+        "check_id": { "type": "string", "pattern": "^[A-Z0-9-]+$" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["passed", "failed"] },
+        "blocking": { "type": "boolean" },
+        "detail": { "type": "string" }
+      }
+    }
+  }
+}

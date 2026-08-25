@@ -1,4 +1,4 @@
-version: "0.1"
+version: "0.2"
 
 defaults:
   blocking: true
@@ -37,6 +37,22 @@ checks:
     required: true
     blocking: false
 
+  code_review:
+    required: true
+    blocking: true
+
+  integrated_commit_security_review:
+    required: true
+    blocking: true
+
+independence:
+  same_candidate_sha: true
+  required_roles:
+    - verifier
+    - reviewer
+    - security-adversary
+  barrier: all_terminal
+
 acceptance_criteria:
   all_required: true
 
@@ -45,3 +61,4 @@ decision:
     - all_required_checks_pass
     - all_required_acceptance_criteria_pass
     - no_blocking_findings
+    - all_independent_reviews_reference_same_candidate_sha

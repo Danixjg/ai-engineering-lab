@@ -1,4 +1,4 @@
-version: "0.1"
+version: "0.2"
 
 max_attempts: 3
 
@@ -10,12 +10,20 @@ on_failure:
     - type_check_failure
     - lint_failure
     - acceptance_criterion_failure
+    - integration_conflict
+    - code_review_failure
 
   non_retryable:
     - security_failure
     - production_access_required
     - permission_failure
     - destructive_change_required
+
+routing:
+  planning_owner: engineering-lead
+  implementation_owner: original-builder
+  integration_conflict_owner: conflicting-task-owner
+  security_owner: human
 
 retry:
   preserve_original_task: true
@@ -31,7 +39,7 @@ stop_conditions:
 final_states:
 
   after_success:
-    status: verified
+    status: integration
 
   after_max_attempts:
     status: needs_human

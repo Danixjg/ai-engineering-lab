@@ -1,6 +1,6 @@
 {
   "$schema": "../schemas/agent.schema.json",
-  "schema_version": "0.3",
+  "schema_version": "0.4",
   "agent_id": "AGENT-REVIEWER-01",
   "name": "reviewer-01",
   "role": "reviewer",
@@ -10,7 +10,8 @@
     "version": { "minimum": "0.149" },
     "requirements": {
       "runtime_mode": "local",
-      "capabilities": ["agent-skill-v1", "execution-manifest-v1", "local-worktree-v1", "rpc-v1", "skill-bundles-v1"]
+      "capabilities": ["agent-skill-v1", "execution-manifest-v1", "local-worktree-v1", "rpc-v1", "skill-bundles-v1"],
+      "model_strategy": "runtime_default"
     }
   },
   "skills": ["repository-analysis"],
@@ -19,6 +20,6 @@
   "health_checks": ["codex_cli", "github", "repository_access"],
   "responsibilities": ["Review implementation quality and report findings."],
   "forbidden_actions": ["Merge or approve a pull request."],
-  "inputs": ["engineering_task", "pull_request", "repository"],
-  "outputs": ["finding", "evidence_bundle"]
+  "inputs": ["engineering_task", "integration_result", "pull_request", "repository"],
+  "outputs": ["review_result", "finding", "evidence_bundle"]
 }

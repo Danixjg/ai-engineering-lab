@@ -27,6 +27,13 @@ those requirements with the capabilities reported by Multica runtimes; agent
 names are used only to identify the selected persistent workspace agents, not
 to infer runtime compatibility.
 
+Each runtime requirement also declares a `model_strategy`. `preserve` blocks a
+cross-provider move unless the target advertises the current model;
+`runtime_default` atomically clears an incompatible workspace model while
+rebinding so the target runtime selects its configured default. Model IDs
+remain workspace configuration and are never hard-coded into repository
+policy.
+
 `.ai/runtime/runtime-manifest.yaml` defines portable-runtime compatibility and
 maps provider names to local executable and authentication checks. These files
 use JSON-compatible YAML intentionally: it lets a fresh machine run the CLI
@@ -43,14 +50,18 @@ Run the repository launcher directly, or add `bin/` to your `PATH` to use
 ./bin/multiengin start --all
 ./bin/multiengin doctor --all
 ./bin/multiengin agents --all
+./bin/multiengin status --all
+./bin/multiengin status --all --output json
+./bin/multiengin workflow-check
+./bin/multiengin squad-check
 ./bin/multiengin update --all
 ./bin/multiengin stop
 ```
 
 `start` runs four stages:
 
-1. **Bootstrap** installs missing runtime CLIs, completes required login flows,
-   connects the workspace, and starts the local daemon.
+1. **Bootstrap** installs missing language runtimes and runtime CLIs, completes
+   required login flows, connects the workspace, and starts the local daemon.
 2. **Discover** reads the active workspace's agents and runtimes plus the
    current daemon's registered runtime IDs.
 3. **Reconcile** chooses an online local runtime whose provider, mode, version,
@@ -76,6 +87,14 @@ daemon; it never stops cloud agents or changes cloud workspace state.
 health when Multica is available. `update` first runs `git pull --ff-only` to
 obtain the current manifests, then applies the same four-stage reconciliation
 as `start`.
+
+`status` combines host, daemon, workflow-contract, squad-topology, local tool,
+authentication, and workspace-binding checks under stable check IDs. Its JSON
+form conforms to `.ai/schemas/workflow-status.schema.json`. `workflow-check`
+validates transitions, reachability, agent contracts, review barriers, and
+terminal outcomes without contacting Multica. `squad-check` verifies that the
+live Engineering Squad has the repository-declared leader, seven role
+assignments, and member count.
 
 ## Scope boundary
 

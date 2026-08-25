@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/workflow.schema.json",
+  "title": "Engineering Workflow Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "squad", "entry_state", "states"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "type": "string", "const": "0.2" },
+    "name": { "type": "string", "minLength": 1 },
+    "squad": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "leader", "roles"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "leader": { "$ref": "#/$defs/agentId" },
+        "roles": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/agentId" }
+        }
+      }
+    },
+    "entry_state": { "$ref": "#/$defs/stateName" },
+    "states": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/state" }
+    }
+  },
+  "$defs": {
+    "agentId": {
+      "type": "string",
+      "pattern": "^AGENT-[A-Z0-9-]+$"
+    },
+    "stateName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "contract": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "contracts": {
+      "oneOf": [
+        { "$ref": "#/$defs/contract" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/contract" }
+        }
+      ]
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["next"],
+      "properties": {
+        "next": { "$ref": "#/$defs/stateName" },
+        "condition": { "type": "string", "minLength": 1 }
+      }
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "agent", "input", "output"],
+      "properties": {
+        "name": { "$ref": "#/$defs/stateName" },
+        "agent": { "$ref": "#/$defs/agentId" },
+        "input": { "$ref": "#/$defs/contracts" },
+        "output": { "$ref": "#/$defs/contracts" }
+      }
+    },
+    "barrier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "transitions"],
+      "properties": {
+        "mode": { "type": "string", "const": "all_terminal" },
+        "transitions": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/transition" }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description"],
+      "properties": {
+        "description": { "type": "string", "minLength": 1 },
+        "agent": { "$ref": "#/$defs/agentId" },
+        "input": { "$ref": "#/$defs/contracts" },
+        "output": { "$ref": "#/$defs/contracts" },
+        "next": { "$ref": "#/$defs/stateName" },
+        "transitions": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/transition" }
+        },
+        "parallel": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/branch" }
+        },
+        "barrier": { "$ref": "#/$defs/barrier" },
+        "terminal": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "terminal": { "const": true } },
+            "required": ["terminal"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["next"] },
+                { "required": ["transitions"] },
+                { "required": ["barrier"] }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -23,6 +23,7 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[1]
 AGENTS_DIR = ROOT / ".ai" / "agents"
 RUNTIME_MANIFEST = ROOT / ".ai" / "runtime" / "runtime-manifest.yaml"
+WORKFLOW_MANIFEST = ROOT / ".ai" / "workflows" / "implementation.yaml"
 LOCAL_BIN = Path.home() / ".local" / "bin"
 STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
 RUNTIME_HISTORY = STATE_HOME / "multiengin" / "runtime-history.json"
@@ -42,6 +43,8 @@ class Check:
     passed: bool
     detail: str = ""
     blocking: bool = True
+    check_id: str = ""
+    category: str = "environment"
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,7 @@ class Reconciliation:
     workspace_agent: dict[str, Any]
     target_runtime: dict[str, Any]
     previous_runtime: dict[str, Any] | None
+    clear_model: bool = False
 
     @property
     def previous_runtime_id(self) -> str:
@@ -99,6 +103,10 @@ def manifests() -> list[dict[str, Any]]:
 
 def runtime_manifest() -> dict[str, Any]:
     return load_document(RUNTIME_MANIFEST)
+
+
+def workflow_manifest() -> dict[str, Any]:
+    return load_document(WORKFLOW_MANIFEST)
 
 
 def run(command: list[str]) -> tuple[bool, str]:
@@ -147,6 +155,48 @@ def version_at_least(output: str, minimum: str) -> bool:
     required = tuple(int(value) for value in minimum.split("."))
     width = max(len(actual), len(required))
     return actual + (0,) * (width - len(actual)) >= required + (0,) * (width - len(required))
+
+
+def activate_managed_language(language: str, minimum: str) -> bool:
+    mise = shutil.which("mise") or str(LOCAL_BIN / "mise")
+    if not Path(mise).exists():
+        return False
+    ok, location = run([mise, "where", f"{language}@{minimum}"])
+    if not ok or not location:
+        return False
+    binary_directory = str(Path(first_line(location)) / "bin")
+    paths = os.environ.get("PATH", "").split(os.pathsep)
+    if binary_directory not in paths:
+        os.environ["PATH"] = f"{binary_directory}{os.pathsep}{os.environ.get('PATH', '')}"
+    return True
+
+
+def language_runtime_check(language: str, command: str, minimum: str) -> Check:
+    activate_managed_language(language, minimum)
+    ok, output = run([command, "--version"])
+    return Check(
+        language.title(),
+        ok and version_at_least(output, minimum),
+        f"requires {minimum}+",
+        check_id=f"CORE-{language.upper()}",
+        category="environment",
+    )
+
+
+def install_managed_language(language: str, minimum: str, dry_run: bool) -> bool:
+    if dry_run:
+        print(f"  would install {language} {minimum}+ with mise")
+        return True
+    mise = shutil.which("mise") or str(LOCAL_BIN / "mise")
+    if not Path(mise).exists():
+        print("  installing mise from its official installer...")
+        result = subprocess.run("curl -fsSL https://mise.run | sh", shell=True, check=False)
+        if result.returncode != 0:
+            return False
+        mise = str(LOCAL_BIN / "mise")
+    if subprocess.run([mise, "use", "--global", f"{language}@{minimum}"], check=False).returncode != 0:
+        return False
+    return activate_managed_language(language, minimum)
 
 
 def authenticated(command: list[str]) -> bool:
@@ -223,22 +273,8 @@ def core_checks() -> list[Check]:
     checks.append(Check("Multica daemon", daemon_ok and daemon_running(daemon), "run: multica daemon start"))
 
     compatibility = runtime_manifest()["compatibility"]
-    python_ok, python_version = run(["python3", "--version"])
-    checks.append(
-        Check(
-            "Python",
-            python_ok and version_at_least(python_version, compatibility["python"]),
-            f"requires {compatibility['python']}+",
-        )
-    )
-    node_ok, node_version = run(["node", "--version"])
-    checks.append(
-        Check(
-            "Node",
-            node_ok and version_at_least(node_version, compatibility["node"]),
-            f"requires {compatibility['node']}+",
-        )
-    )
+    checks.append(language_runtime_check("python", "python3", compatibility["python"]))
+    checks.append(language_runtime_check("node", "node", compatibility["node"]))
     return checks
 
 
@@ -251,6 +287,183 @@ def print_check(check: Check, indent: str = "") -> None:
 
 def ready(checks: Iterable[Check]) -> bool:
     return all(check.passed or not check.blocking for check in checks)
+
+
+def contracts(value: Any) -> set[str]:
+    if isinstance(value, str):
+        return {value}
+    if isinstance(value, list):
+        return {item for item in value if isinstance(item, str)}
+    return set()
+
+
+def workflow_assignments(workflow: dict[str, Any]) -> list[tuple[str, str, set[str], set[str]]]:
+    assignments: list[tuple[str, str, set[str], set[str]]] = []
+    for state_name, state in workflow.get("states", {}).items():
+        if not isinstance(state, dict):
+            continue
+        if isinstance(state.get("agent"), str):
+            assignments.append(
+                (state_name, state["agent"], contracts(state.get("input")), contracts(state.get("output")))
+            )
+        for branch in state.get("parallel", []):
+            if isinstance(branch, dict) and isinstance(branch.get("agent"), str):
+                label = f"{state_name}.{branch.get('name', 'branch')}"
+                assignments.append(
+                    (label, branch["agent"], contracts(branch.get("input")), contracts(branch.get("output")))
+                )
+    return assignments
+
+
+def workflow_targets(state: dict[str, Any]) -> set[str]:
+    targets: set[str] = set()
+    if isinstance(state.get("next"), str):
+        targets.add(state["next"])
+    transition_groups = [state.get("transitions", {})]
+    barrier = state.get("barrier", {})
+    if isinstance(barrier, dict):
+        transition_groups.append(barrier.get("transitions", {}))
+    for transitions in transition_groups:
+        if not isinstance(transitions, dict):
+            continue
+        for transition in transitions.values():
+            if isinstance(transition, dict) and isinstance(transition.get("next"), str):
+                targets.add(transition["next"])
+    return targets
+
+
+def workflow_checks(
+    agent_manifests: list[dict[str, Any]] | None = None,
+    workflow: dict[str, Any] | None = None,
+) -> list[Check]:
+    agent_manifests = manifests() if agent_manifests is None else agent_manifests
+    workflow = workflow_manifest() if workflow is None else workflow
+    states = workflow.get("states", {})
+    if not isinstance(states, dict):
+        return [
+            Check(
+                "Workflow states",
+                False,
+                "states must be an object",
+                check_id="WORKFLOW-STATES",
+                category="workflow",
+            )
+        ]
+    checks: list[Check] = []
+    entry = workflow.get("entry_state")
+    checks.append(
+        Check(
+            "Workflow entry state",
+            isinstance(entry, str) and entry in states,
+            f"entry state {entry!r} is not declared",
+            check_id="WORKFLOW-ENTRY",
+            category="workflow",
+        )
+    )
+
+    targets = {target for state in states.values() if isinstance(state, dict) for target in workflow_targets(state)}
+    unknown_targets = sorted(targets - set(states))
+    checks.append(
+        Check(
+            "Workflow transitions",
+            not unknown_targets,
+            f"unknown targets: {', '.join(unknown_targets)}",
+            check_id="WORKFLOW-TRANSITIONS",
+            category="workflow",
+        )
+    )
+
+    reachable: set[str] = set()
+    pending = [entry] if isinstance(entry, str) and entry in states else []
+    while pending:
+        state_name = pending.pop()
+        if state_name in reachable:
+            continue
+        reachable.add(state_name)
+        state = states.get(state_name, {})
+        if isinstance(state, dict):
+            pending.extend(workflow_targets(state) - reachable)
+    unreachable = sorted(set(states) - reachable)
+    checks.append(
+        Check(
+            "Workflow reachability",
+            not unreachable,
+            f"unreachable states: {', '.join(unreachable)}",
+            check_id="WORKFLOW-REACHABILITY",
+            category="workflow",
+        )
+    )
+
+    by_id = {agent["agent_id"]: agent for agent in agent_manifests}
+    assignments = workflow_assignments(workflow)
+    missing_agents = sorted({agent_id for _, agent_id, _, _ in assignments if agent_id not in by_id})
+    squad = workflow.get("squad", {})
+    role_agents = set(squad.get("roles", {}).values()) if isinstance(squad, dict) else set()
+    missing_agents.extend(sorted(agent_id for agent_id in role_agents if agent_id not in by_id))
+    missing_agents = sorted(set(missing_agents))
+    checks.append(
+        Check(
+            "Workflow agent manifests",
+            not missing_agents,
+            f"missing manifests: {', '.join(missing_agents)}",
+            check_id="WORKFLOW-AGENTS",
+            category="workflow",
+        )
+    )
+
+    contract_errors: list[str] = []
+    for label, agent_id, required_inputs, required_outputs in assignments:
+        manifest = by_id.get(agent_id)
+        if manifest is None:
+            continue
+        missing_inputs = sorted(required_inputs - set(manifest.get("inputs", [])))
+        missing_outputs = sorted(required_outputs - set(manifest.get("outputs", [])))
+        if missing_inputs:
+            contract_errors.append(f"{label} input: {', '.join(missing_inputs)}")
+        if missing_outputs:
+            contract_errors.append(f"{label} output: {', '.join(missing_outputs)}")
+    checks.append(
+        Check(
+            "Workflow agent contracts",
+            not contract_errors,
+            " | ".join(contract_errors),
+            check_id="WORKFLOW-CONTRACTS",
+            category="workflow",
+        )
+    )
+
+    parallel_states = [state for state in states.values() if isinstance(state, dict) and state.get("parallel")]
+    barrier_ready = bool(parallel_states) and all(
+        state.get("barrier", {}).get("mode") == "all_terminal" for state in parallel_states
+    )
+    same_candidate = all(
+        "integration_result" in contracts(branch.get("input"))
+        for state in parallel_states
+        for branch in state.get("parallel", [])
+        if isinstance(branch, dict)
+    )
+    checks.append(
+        Check(
+            "Independent review barrier",
+            barrier_ready and same_candidate,
+            "parallel reviews must use an all-terminal barrier and the same integration result",
+            check_id="WORKFLOW-REVIEW-BARRIER",
+            category="workflow",
+        )
+    )
+
+    terminal_states = {name for name, state in states.items() if isinstance(state, dict) and state.get("terminal")}
+    required_terminals = {"merged", "rejected", "blocked", "needs_human"}
+    checks.append(
+        Check(
+            "Workflow terminal states",
+            required_terminals.issubset(terminal_states),
+            f"missing terminal states: {', '.join(sorted(required_terminals - terminal_states))}",
+            check_id="WORKFLOW-TERMINALS",
+            category="workflow",
+        )
+    )
+    return checks
 
 
 def select_agents(all_agents: list[dict[str, Any]], requested: list[str], select_all: bool) -> list[dict[str, Any]]:
@@ -325,6 +538,13 @@ def login(authentication: str, dry_run: bool) -> bool:
 
 
 def bootstrap(selected: list[dict[str, Any]], yes: bool, dry_run: bool) -> bool:
+    compatibility = runtime_manifest()["compatibility"]
+    language_commands = {"python": "python3", "node": "node"}
+    missing_languages = [
+        (language, minimum)
+        for language, minimum in compatibility.items()
+        if not language_runtime_check(language, language_commands[language], minimum).passed
+    ]
     missing_runtimes = [agent for agent in selected if not runtime_check(agent).passed]
     auths = sorted(
         {
@@ -342,8 +562,10 @@ def bootstrap(selected: list[dict[str, Any]], yes: bool, dry_run: bool) -> bool:
             if not check.passed and check.blocking and check.name in {"git", "Docker"}
         }
     )
-    if missing_runtimes or auths or missing_dependencies:
+    if missing_languages or missing_runtimes or auths or missing_dependencies:
         print("Plan:")
+        for language, minimum in missing_languages:
+            print(f"  • install compatible language runtime: {language} {minimum}+")
         for agent in missing_runtimes:
             print(f"  • install required runtime for {agent['name']}: {agent['runtime']['provider']}")
         for auth in auths:
@@ -364,6 +586,9 @@ def bootstrap(selected: list[dict[str, Any]], yes: bool, dry_run: bool) -> bool:
             print("  would run: multica setup")
             return False
         if subprocess.run(["multica", "setup"], check=False).returncode != 0:
+            return False
+    for language, minimum in missing_languages:
+        if not install_managed_language(language, minimum, dry_run):
             return False
     for agent in missing_runtimes:
         if not install_runtime(agent, dry_run):
@@ -480,6 +705,33 @@ def no_compatible_runtime_message(agent: dict[str, Any], snapshot: Discovery) ->
     return f"no compatible local runtime exists for workspace agent {agent['name']}{suffix}"
 
 
+def model_reset_required(
+    manifest: dict[str, Any],
+    cloud_agent: dict[str, Any],
+    current_runtime: dict[str, Any] | None,
+    target_runtime: dict[str, Any],
+) -> bool:
+    model = str(cloud_agent.get("model") or "")
+    if not model:
+        return False
+    current_provider = current_runtime.get("provider") if current_runtime else None
+    target_provider = target_runtime.get("provider")
+    if current_provider == target_provider:
+        return False
+    strategy = manifest["runtime"].get("requirements", {}).get("model_strategy", "preserve")
+    if strategy == "runtime_default":
+        return True
+    metadata = target_runtime.get("metadata", {})
+    advertised_models = metadata.get("models", []) if isinstance(metadata, dict) else []
+    if isinstance(advertised_models, list) and model in advertised_models:
+        return False
+    raise ValueError(
+        f"cannot preserve model {model!r} while moving {manifest['name']} from "
+        f"{current_provider or 'an unknown provider'} to {target_provider or 'an unknown provider'}; "
+        "set runtime.requirements.model_strategy to runtime_default or choose a compatible model"
+    )
+
+
 def plan_reconciliation(selected: list[dict[str, Any]], snapshot: Discovery) -> list[Reconciliation]:
     plan: list[Reconciliation] = []
     runtimes_by_id = {str(runtime.get("id")): runtime for runtime in snapshot.runtimes}
@@ -502,7 +754,8 @@ def plan_reconciliation(selected: list[dict[str, Any]], snapshot: Discovery) -> 
             target = current
         else:
             target = candidates[0]
-        plan.append(Reconciliation(manifest, cloud_agent, target, current))
+        clear_model = model_reset_required(manifest, cloud_agent, current, target)
+        plan.append(Reconciliation(manifest, cloud_agent, target, current, clear_model))
     return plan
 
 
@@ -536,6 +789,9 @@ def record_runtime_history(action: Reconciliation, workspace_id: str, history_fi
             "current_runtime_id": action.target_runtime_id,
             "previous_runtime": runtime_history_detail(action.previous_runtime, action.previous_runtime_id),
             "current_runtime": runtime_history_detail(action.target_runtime),
+            "previous_model": action.workspace_agent.get("model"),
+            "model_strategy": action.manifest["runtime"].get("requirements", {}).get("model_strategy"),
+            "current_model": "runtime_default" if action.clear_model else action.workspace_agent.get("model"),
             "recorded_at": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -560,25 +816,26 @@ def apply_reconciliation(
             continue
         previous = action.previous_runtime_id or "unbound"
         print(f"  ↻ {name}: {previous} -> {action.target_runtime_id}")
+        command = [
+            "multica",
+            "agent",
+            "update",
+            str(action.workspace_agent["id"]),
+            "--runtime-id",
+            action.target_runtime_id,
+        ]
+        if action.clear_model:
+            command.extend(["--model", ""])
+        command.extend(["--output", "json"])
         if dry_run:
+            model_note = " --model <runtime-default>" if action.clear_model else ""
             print(
                 f"    would run: multica agent update {action.workspace_agent['id']} "
-                f"--runtime-id {action.target_runtime_id}"
+                f"--runtime-id {action.target_runtime_id}{model_note}"
             )
             changes += 1
             continue
-        ok, output = run(
-            [
-                "multica",
-                "agent",
-                "update",
-                str(action.workspace_agent["id"]),
-                "--runtime-id",
-                action.target_runtime_id,
-                "--output",
-                "json",
-            ]
-        )
+        ok, output = run(command)
         if not ok:
             raise ValueError(f"failed to rebind {name}: {first_line(output) or 'agent update failed'}")
         changes += 1
@@ -590,17 +847,20 @@ def apply_reconciliation(
 
 
 def projected_discovery(snapshot: Discovery, plan: list[Reconciliation]) -> Discovery:
-    targets = {
-        str(action.workspace_agent.get("id")): action.target_runtime_id
+    actions = {
+        str(action.workspace_agent.get("id")): action
         for action in plan
         if action.change_required
     }
     agents: list[dict[str, Any]] = []
     for agent in snapshot.agents:
         projected = dict(agent)
-        if str(agent.get("id")) in targets:
-            projected["runtime_id"] = targets[str(agent.get("id"))]
+        action = actions.get(str(agent.get("id")))
+        if action is not None:
+            projected["runtime_id"] = action.target_runtime_id
             projected["runtime_bound"] = True
+            if action.clear_model:
+                projected["model"] = ""
         agents.append(projected)
     return Discovery(snapshot.workspace, snapshot.daemon, tuple(agents), snapshot.runtimes)
 
@@ -636,7 +896,247 @@ def workspace_checks(agent: dict[str, Any], snapshot: Discovery) -> list[Check]:
             f"status is {cloud_agent.get('status') or 'unknown'}",
         )
     )
+    required_skills = set(agent.get("skills", []))
+    enabled_skills = {
+        str(skill.get("name"))
+        for skill in cloud_agent.get("skills", [])
+        if isinstance(skill, dict) and skill.get("enabled", True)
+    }
+    missing_skills = sorted(required_skills - enabled_skills)
+    checks.append(
+        Check(
+            "Workspace skills",
+            not missing_skills,
+            f"missing enabled skills: {', '.join(missing_skills)}",
+            check_id=f"{agent['agent_id']}-WORKSPACE-SKILLS",
+            category="workspace",
+        )
+    )
     return checks
+
+
+def squad_checks(
+    agent_manifests: list[dict[str, Any]],
+    workflow: dict[str, Any],
+    snapshot: Discovery,
+    squads: tuple[dict[str, Any], ...] | None = None,
+    members: tuple[dict[str, Any], ...] | None = None,
+) -> list[Check]:
+    specification = workflow.get("squad", {})
+    squad_name = specification.get("name")
+    if squads is None:
+        payload = json_output(["multica", "squad", "list", "--output", "json"], "list workspace squads")
+        squads = json_collection(payload, "squads", "list workspace squads")
+    squad = next((candidate for candidate in squads if candidate.get("name") == squad_name), None)
+    checks = [
+        Check(
+            "Engineering squad exists",
+            squad is not None,
+            f"squad {squad_name!r} was not found",
+            check_id="SQUAD-EXISTS",
+            category="topology",
+        )
+    ]
+    if squad is None:
+        return checks
+    if members is None:
+        payload = json_output(
+            ["multica", "squad", "member", "list", str(squad["id"]), "--output", "json"],
+            "list engineering squad members",
+        )
+        members = json_collection(payload, "members", "list engineering squad members")
+
+    manifest_by_id = {agent["agent_id"]: agent for agent in agent_manifests}
+    cloud_by_name = {str(agent.get("name")): agent for agent in snapshot.agents}
+    cloud_by_manifest_id: dict[str, dict[str, Any]] = {}
+    missing_workspace_agents: list[str] = []
+    for agent_id, manifest in manifest_by_id.items():
+        cloud = cloud_by_name.get(manifest["name"])
+        if cloud is None:
+            missing_workspace_agents.append(manifest["name"])
+        else:
+            cloud_by_manifest_id[agent_id] = cloud
+    checks.append(
+        Check(
+            "Manifest agents exist in workspace",
+            not missing_workspace_agents,
+            f"missing workspace agents: {', '.join(sorted(missing_workspace_agents))}",
+            check_id="SQUAD-WORKSPACE-AGENTS",
+            category="topology",
+        )
+    )
+
+    leader_manifest_id = specification.get("leader")
+    expected_leader = cloud_by_manifest_id.get(str(leader_manifest_id), {}).get("id")
+    checks.append(
+        Check(
+            "Engineering squad leader",
+            bool(expected_leader) and squad.get("leader_id") == expected_leader,
+            "workspace squad leader does not match the workflow leader",
+            check_id="SQUAD-LEADER",
+            category="topology",
+        )
+    )
+
+    actual_roles = {
+        (str(member.get("member_id")), str(member.get("role")))
+        for member in members
+        if member.get("member_type") == "agent"
+    }
+    role_errors: list[str] = []
+    expected_roles = specification.get("roles", {})
+    for role, manifest_id in expected_roles.items():
+        cloud_id = cloud_by_manifest_id.get(str(manifest_id), {}).get("id")
+        if not cloud_id or (str(cloud_id), str(role)) not in actual_roles:
+            role_errors.append(f"{role}={manifest_id}")
+    checks.append(
+        Check(
+            "Engineering squad role assignments",
+            not role_errors,
+            f"missing or incorrect roles: {', '.join(role_errors)}",
+            check_id="SQUAD-ROLES",
+            category="topology",
+        )
+    )
+    expected_count = len(expected_roles)
+    checks.append(
+        Check(
+            "Engineering squad member count",
+            len(actual_roles) == expected_count,
+            f"expected {expected_count} agent members; found {len(actual_roles)}",
+            check_id="SQUAD-MEMBER-COUNT",
+            category="topology",
+        )
+    )
+    return checks
+
+
+def check_id(check: Check, prefix: str) -> str:
+    if check.check_id:
+        return check.check_id
+    suffix = re.sub(r"[^A-Z0-9]+", "-", check.name.upper()).strip("-")
+    return f"{prefix}-{suffix}"
+
+
+def check_payload(check: Check, prefix: str) -> dict[str, Any]:
+    return {
+        "check_id": check_id(check, prefix),
+        "name": check.name,
+        "category": check.category,
+        "status": "passed" if check.passed else "failed",
+        "blocking": check.blocking,
+        "detail": check.detail,
+    }
+
+
+def status_report(selected: list[dict[str, Any]]) -> tuple[dict[str, Any], bool]:
+    global_checks = core_checks()
+    global_checks.extend(workflow_checks())
+    snapshot: Discovery | None = None
+    try:
+        snapshot = discover()
+    except ValueError as error:
+        global_checks.append(
+            Check(
+                "Workspace discovery",
+                False,
+                str(error),
+                check_id="WORKSPACE-DISCOVERY",
+                category="workspace",
+            )
+        )
+    if snapshot is not None:
+        try:
+            global_checks.extend(squad_checks(manifests(), workflow_manifest(), snapshot))
+        except ValueError as error:
+            global_checks.append(
+                Check(
+                    "Squad discovery",
+                    False,
+                    str(error),
+                    check_id="SQUAD-DISCOVERY",
+                    category="topology",
+                )
+            )
+
+    agent_reports: list[dict[str, Any]] = []
+    all_ready = ready(global_checks)
+    for agent in selected:
+        checks = agent_checks(agent)
+        if snapshot is not None:
+            checks.extend(workspace_checks(agent, snapshot))
+        else:
+            checks.append(Check("Workspace binding", False, "workspace discovery unavailable"))
+        agent_ready = ready(checks)
+        all_ready = all_ready and agent_ready
+        agent_reports.append(
+            {
+                "agent_id": agent["agent_id"],
+                "name": agent["name"],
+                "status": "ready" if agent_ready else "blocked",
+                "checks": [check_payload(check, agent["agent_id"]) for check in checks],
+            }
+        )
+    payload = {
+        "schema_version": "0.1",
+        "status": "ready" if all_ready else "blocked",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "workspace": snapshot.workspace_id if snapshot is not None else None,
+        "checks": [check_payload(check, "CORE") for check in global_checks],
+        "agents": agent_reports,
+    }
+    return payload, all_ready
+
+
+def print_status_payload(payload: dict[str, Any]) -> None:
+    print(f"MultiEngin Workflow Status: {payload['status'].upper()}\n")
+    print("Global checks")
+    for check in payload["checks"]:
+        mark = "✓" if check["status"] == "passed" else "✗"
+        optional = " [optional]" if not check["blocking"] else ""
+        detail = f"  ({check['detail']})" if check["status"] == "failed" and check["detail"] else ""
+        print(f"  {mark} [{check['check_id']}] {check['name']}{optional}{detail}")
+    for agent in payload["agents"]:
+        print(f"\n{agent['name']}  {agent['status'].upper()}")
+        for check in agent["checks"]:
+            mark = "✓" if check["status"] == "passed" else "✗"
+            optional = " [optional]" if not check["blocking"] else ""
+            detail = f"  ({check['detail']})" if check["status"] == "failed" and check["detail"] else ""
+            print(f"  {mark} [{check['check_id']}] {check['name']}{optional}{detail}")
+
+
+def status_command(selected: list[dict[str, Any]], output: str) -> int:
+    payload, all_ready = status_report(selected)
+    if output == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        print_status_payload(payload)
+    return 0 if all_ready else 1
+
+
+def workflow_check_command(output: str) -> int:
+    checks = workflow_checks()
+    payload = [check_payload(check, "WORKFLOW") for check in checks]
+    if output == "json":
+        print(json.dumps({"status": "ready" if ready(checks) else "blocked", "checks": payload}, indent=2))
+    else:
+        print("MultiEngin Workflow Contract Check\n")
+        for check in checks:
+            print_check(check)
+    return 0 if ready(checks) else 1
+
+
+def squad_check_command(output: str) -> int:
+    snapshot = discover()
+    checks = squad_checks(manifests(), workflow_manifest(), snapshot)
+    payload = [check_payload(check, "SQUAD") for check in checks]
+    if output == "json":
+        print(json.dumps({"status": "ready" if ready(checks) else "blocked", "checks": payload}, indent=2))
+    else:
+        print("MultiEngin Squad Topology Check\n")
+        for check in checks:
+            print_check(check)
+    return 0 if ready(checks) else 1
 
 
 def needs_daemon_refresh(selected: list[dict[str, Any]], snapshot: Discovery) -> bool:
@@ -770,24 +1270,35 @@ def stop(dry_run: bool) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for name in ("start", "doctor", "agents", "update"):
+    for name in ("start", "doctor", "agents", "update", "status"):
         command = subparsers.add_parser(name)
         command.add_argument("agents", nargs="*", metavar="AGENT")
         command.add_argument("--all", action="store_true", help="select every configured agent")
+        if name == "status":
+            command.add_argument("--output", choices=("table", "json"), default="table")
         if name in {"start", "update"}:
             command.add_argument("--yes", action="store_true", help="do not ask before provisioning")
             command.add_argument("--dry-run", action="store_true", help="show mutations without performing them")
+    for name in ("workflow-check", "squad-check"):
+        command = subparsers.add_parser(name)
+        command.add_argument("--output", choices=("table", "json"), default="table")
     stop_parser = subparsers.add_parser("stop")
     stop_parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "stop":
             return stop(args.dry_run)
+        if args.command == "workflow-check":
+            return workflow_check_command(args.output)
+        if args.command == "squad-check":
+            return squad_check_command(args.output)
         selected = select_agents(manifests(), args.agents, args.all)
         if args.command == "doctor":
             return doctor(selected)
         if args.command == "agents":
             return list_agents(selected)
+        if args.command == "status":
+            return status_command(selected, args.output)
         if args.command == "start":
             return start(selected, args.yes, args.dry_run)
         return update(selected, args.yes, args.dry_run)

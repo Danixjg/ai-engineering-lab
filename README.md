@@ -179,3 +179,13 @@ them to manifest-declared capabilities, and rebinds the selected persistent
 workspace agents when they still point at another machine. The lower-level
 `.infrastructure/verify-worker.sh` remains useful when validating a full host
 against the shared Python/Node compatibility line.
+
+The canonical delivery path is Engineering Lead planning, independently owned
+Builder tasks, clean-SHA integration, parallel Verifier/Reviewer/Security
+review of one integrated commit, Judge evidence aggregation, an explicit human
+approval gate, and authorized integration. Run the combined readiness report
+before routing work:
+
+```bash
+./bin/multiengin status --all
+```

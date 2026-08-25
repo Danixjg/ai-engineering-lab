@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/review-result.schema.json",
+  "title": "Independent Review Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "review_type", "candidate_sha", "decision", "findings", "summary", "generated_at"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "0.1" },
+    "task_id": { "type": "string", "pattern": "^TASK-[A-Z0-9-]+$" },
+    "review_type": { "type": "string", "enum": ["code", "security", "adversarial"] },
+    "candidate_sha": { "type": "string", "minLength": 7 },
+    "decision": { "type": "string", "enum": ["pass", "fail", "needs_human"] },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "finding.schema.json" }
+    },
+    "summary": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}

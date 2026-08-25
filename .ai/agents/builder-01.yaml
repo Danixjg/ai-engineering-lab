@@ -1,6 +1,6 @@
 {
   "$schema": "../schemas/agent.schema.json",
-  "schema_version": "0.3",
+  "schema_version": "0.4",
   "agent_id": "AGENT-BUILDER-01",
   "name": "builder-01",
   "role": "builder",
@@ -10,7 +10,8 @@
     "version": { "minimum": "2.0" },
     "requirements": {
       "runtime_mode": "local",
-      "capabilities": ["agent-skill-v1", "execution-manifest-v1", "local-worktree-v1", "rpc-v1", "skill-bundles-v1"]
+      "capabilities": ["agent-skill-v1", "execution-manifest-v1", "local-worktree-v1", "rpc-v1", "skill-bundles-v1"],
+      "model_strategy": "runtime_default"
     }
   },
   "skills": ["repository-analysis", "git-workflow", "analyze-test-failure"],
@@ -19,6 +20,6 @@
   "health_checks": ["kiro_cli", "github", "repository_access"],
   "responsibilities": ["Implement approved engineering tasks and report execution evidence."],
   "forbidden_actions": ["Merge or approve its own pull request."],
-  "inputs": ["engineering_task", "repository"],
+  "inputs": ["engineering_task", "repair_request", "repository"],
   "outputs": ["execution_result", "pull_request"]
 }

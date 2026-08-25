@@ -37,7 +37,11 @@ def agent_manifest(name: str = "verifier-01", provider: str = "codex") -> dict[s
             "provider": provider,
             "executable": provider,
             "version": {"minimum": "0.149" if provider == "codex" else "2.0"},
-            "requirements": {"runtime_mode": "local", "capabilities": CAPABILITIES},
+            "requirements": {
+                "runtime_mode": "local",
+                "capabilities": CAPABILITIES,
+                "model_strategy": "runtime_default",
+            },
         },
     }
 
@@ -69,6 +73,7 @@ def discovery(
     bound_runtime_id: str,
     runtimes: list[dict[str, object]],
     local_runtime_ids: list[str],
+    model: str = "",
 ) -> multiengin.Discovery:
     return multiengin.Discovery(
         workspace={"id": "workspace-01", "name": "Engineering"},
@@ -83,6 +88,7 @@ def discovery(
                 "name": manifest["name"],
                 "runtime_bound": True,
                 "runtime_id": bound_runtime_id,
+                "model": model,
                 "status": "idle",
             },
         ),
@@ -95,13 +101,22 @@ class MultiEnginTests(unittest.TestCase):
         agents = multiengin.manifests()
         self.assertEqual(
             {agent["name"] for agent in agents},
-            {"builder-01", "verifier-01", "reviewer-01", "security-adversary-01", "judge-01"},
+            {
+                "engineering-lead-01",
+                "builder-01",
+                "integrator-01",
+                "verifier-01",
+                "reviewer-01",
+                "security-adversary-01",
+                "judge-01",
+            },
         )
         for agent in agents:
-            self.assertEqual(agent["schema_version"], "0.3")
+            self.assertEqual(agent["schema_version"], "0.4")
             requirements = agent["runtime"]["requirements"]
             self.assertEqual(requirements["runtime_mode"], "local")
             self.assertTrue(set(CAPABILITIES).issubset(requirements["capabilities"]))
+            self.assertIn(requirements["model_strategy"], {"preserve", "runtime_default"})
         selected = multiengin.select_agents(agents, ["builder-01"], False)
         self.assertEqual(selected[0]["runtime"]["provider"], "kiro")
 
@@ -109,6 +124,15 @@ class MultiEnginTests(unittest.TestCase):
         self.assertTrue(multiengin.version_at_least("codex-cli 0.149.0", "0.149"))
         self.assertTrue(multiengin.version_at_least("kiro-cli 2.10.0", "2.9"))
         self.assertFalse(multiengin.version_at_least("node v20.0.0", "24"))
+
+    def test_language_runtime_check_uses_numeric_minimum(self) -> None:
+        with (
+            mock.patch.object(multiengin, "activate_managed_language", return_value=False),
+            mock.patch.object(multiengin, "run", return_value=(True, "v24.1.0")),
+        ):
+            check = multiengin.language_runtime_check("node", "node", "24")
+        self.assertTrue(check.passed)
+        self.assertEqual(check.check_id, "CORE-NODE")
 
     def test_agent_selection_deduplicates_and_rejects_unknown_names(self) -> None:
         agents = multiengin.manifests()
@@ -167,6 +191,58 @@ class MultiEnginTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "missing capabilities: rpc-v1"):
+            multiengin.plan_reconciliation([manifest], snapshot)
+
+    def test_cross_provider_rebinding_uses_runtime_default_model_strategy(self) -> None:
+        manifest = agent_manifest(provider="codex")
+        old = runtime("runtime-old", provider="kiro", daemon_id="daemon-old", status="offline")
+        current = runtime("runtime-new", provider="codex")
+        snapshot = discovery(
+            manifest,
+            bound_runtime_id="runtime-old",
+            runtimes=[old, current],
+            local_runtime_ids=["runtime-new"],
+            model="ollama/workspace-model",
+        )
+
+        plan = multiengin.plan_reconciliation([manifest], snapshot)
+        self.assertTrue(plan[0].clear_model)
+        projected = multiengin.projected_discovery(snapshot, plan)
+        self.assertEqual(projected.agents[0]["model"], "")
+        with tempfile.TemporaryDirectory() as directory:
+            history_file = Path(directory) / "runtime-history.json"
+            with mock.patch.object(multiengin, "run", return_value=(True, "{}")) as command:
+                multiengin.apply_reconciliation(plan, snapshot.workspace_id, False, history_file)
+        command.assert_called_once_with(
+            [
+                "multica",
+                "agent",
+                "update",
+                "workspace-agent-01",
+                "--runtime-id",
+                "runtime-new",
+                "--model",
+                "",
+                "--output",
+                "json",
+            ]
+        )
+
+    def test_cross_provider_rebinding_blocks_unverified_preserved_model(self) -> None:
+        manifest = agent_manifest(provider="codex")
+        manifest["runtime"]["requirements"]["model_strategy"] = "preserve"
+        snapshot = discovery(
+            manifest,
+            bound_runtime_id="runtime-old",
+            runtimes=[
+                runtime("runtime-old", provider="kiro", daemon_id="daemon-old", status="offline"),
+                runtime("runtime-new", provider="codex"),
+            ],
+            local_runtime_ids=["runtime-new"],
+            model="ollama/workspace-model",
+        )
+
+        with self.assertRaisesRegex(ValueError, "cannot preserve model"):
             multiengin.plan_reconciliation([manifest], snapshot)
 
     def test_fails_when_no_compatible_runtime_exists(self) -> None:
@@ -260,6 +336,22 @@ class MultiEnginTests(unittest.TestCase):
             local_runtime_ids=["runtime-new"],
         )
         self.assertFalse(multiengin.ready(multiengin.workspace_checks(manifest, offline_snapshot)))
+
+    def test_verification_blocks_when_required_workspace_skill_is_missing(self) -> None:
+        manifest = agent_manifest()
+        manifest["skills"] = ["run-verification"]
+        snapshot = discovery(
+            manifest,
+            bound_runtime_id="runtime-new",
+            runtimes=[runtime("runtime-new")],
+            local_runtime_ids=["runtime-new"],
+        )
+
+        checks = multiengin.workspace_checks(manifest, snapshot)
+
+        skill_check = next(check for check in checks if check.name == "Workspace skills")
+        self.assertFalse(skill_check.passed)
+        self.assertEqual(skill_check.detail, "missing enabled skills: run-verification")
 
 
 if __name__ == "__main__":

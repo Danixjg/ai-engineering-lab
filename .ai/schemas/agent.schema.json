@@ -26,7 +26,7 @@
     },
     "schema_version": {
       "type": "string",
-      "const": "0.3"
+      "const": "0.4"
     },
 
     "agent_id": {
@@ -43,8 +43,10 @@
       "type": "string",
       "enum": [
         "planner",
+        "coordinator",
         "architect",
         "builder",
+        "integrator",
         "tester",
         "reviewer",
         "security",
@@ -89,7 +91,8 @@
           "additionalProperties": false,
           "required": [
             "runtime_mode",
-            "capabilities"
+            "capabilities",
+            "model_strategy"
           ],
           "properties": {
             "runtime_mode": {
@@ -107,6 +110,13 @@
                 "minLength": 1
               },
               "uniqueItems": true
+            },
+            "model_strategy": {
+              "type": "string",
+              "enum": [
+                "preserve",
+                "runtime_default"
+              ]
             }
           }
         }
@@ -178,6 +188,10 @@
         "enum": [
           "engineering_task",
           "execution_result",
+          "integration_result",
+          "verification_result",
+          "review_result",
+          "repair_request",
           "findings",
           "evidence_bundle",
           "repository",
@@ -193,6 +207,10 @@
         "enum": [
           "engineering_task",
           "execution_result",
+          "integration_result",
+          "verification_result",
+          "review_result",
+          "repair_request",
           "finding",
           "evidence_bundle",
           "pull_request"

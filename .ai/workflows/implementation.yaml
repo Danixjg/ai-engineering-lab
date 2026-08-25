@@ -1,123 +1,165 @@
-version: "0.1"
-
-name: autonomous-implementation
-
-# States must conform to workflow-state.schema.json#/properties/state/enum
-
-entry_state: received
-
-states:
-
-  received:
-    description: >
-      Engineering task received and acknowledged. No work has started.
-    next: planning
-
-  planning:
-    description: >
-      Task is being analysed. Agent determines scope, approach, and any
-      up-front clarification needed.
-    next: ready_for_build
-    on_ambiguity: needs_human
-
-  ready_for_build:
-    description: >
-      Task is understood and ready to be handed to the Builder Agent.
-    next: building
-
-  building:
-    agent: AGENT-BUILDER-01
-    description: >
-      Builder Agent implements the Engineering Task, runs local verification,
-      and commits the result.
-    input: engineering_task
-    output: execution_result
-    next: verification
-    on_blocked: blocked
-
-  verification:
-    agent: AGENT-VERIFIER-01
-    description: >
-      Verifier Agent independently runs all deterministic checks against the
-      candidate commit and produces a Verification Result.
-    input:
-      - engineering_task
-      - execution_result
-    output: verification_result
-
-    transitions:
-      passed:
-        next: review
-      failed:
-        next: repairing
-        condition: attempts_remaining
-      failed_no_attempts:
-        next: needs_human
-        condition: max_attempts_reached
-      non_retryable:
-        next: needs_human
-      blocked:
-        next: blocked
-
-  repairing:
-    agent: AGENT-BUILDER-01
-    description: >
-      Builder Agent receives a Repair Request derived from the Verification
-      Result, applies the smallest appropriate correction, re-runs
-      verification, and produces an updated Execution Result.
-    input:
-      - engineering_task
-      - repair_request
-    output: execution_result
-    next: verification
-    on_blocked: blocked
-
-  review:
-    description: >
-      Implementation has passed all automated checks. Awaiting code review
-      by a Reviewer Agent or human.
-    next: judging
-
-  judging:
-    description: >
-      Judge Agent (or human) evaluates the review findings and evidence
-      bundle and makes a pass/fail decision.
-    input:
-      - engineering_task
-      - evidence_bundle
-    output: decision
-
-    transitions:
-      approved:
-        next: approved
-      rejected:
-        next: needs_human
-      needs_human:
-        next: needs_human
-
-  approved:
-    description: >
-      Implementation approved. Ready for merge.
-    next: merged
-    on_merge_blocked: needs_human
-
-  merged:
-    description: >
-      Pull request merged into the target branch.
-    terminal: true
-
-  rejected:
-    description: >
-      Implementation rejected after review. Escalated for human decision.
-    terminal: true
-
-  blocked:
-    description: >
-      A non-retryable blocker prevents progress. Human intervention required.
-    terminal: true
-
-  needs_human:
-    description: >
-      Workflow cannot continue autonomously. Human must inspect, decide, and
-      resume or close the task.
-    terminal: true
+{
+  "$schema": "../schemas/workflow.schema.json",
+  "schema_version": "0.2",
+  "name": "autonomous-implementation",
+  "squad": {
+    "name": "Engineering Squad",
+    "leader": "AGENT-ENGINEERING-LEAD-01",
+    "roles": {
+      "leader": "AGENT-ENGINEERING-LEAD-01",
+      "builder": "AGENT-BUILDER-01",
+      "integrator": "AGENT-INTEGRATOR-01",
+      "verifier": "AGENT-VERIFIER-01",
+      "reviewer": "AGENT-REVIEWER-01",
+      "security-adversary": "AGENT-SECURITY-ADVERSARY-01",
+      "judge": "AGENT-JUDGE-01"
+    }
+  },
+  "entry_state": "received",
+  "states": {
+    "received": {
+      "description": "An engineering task has been received and acknowledged.",
+      "next": "planning"
+    },
+    "planning": {
+      "agent": "AGENT-ENGINEERING-LEAD-01",
+      "description": "The Engineering Lead validates the task and creates bounded child work with owners, refs, dependencies, and acceptance criteria.",
+      "input": ["engineering_task", "repository"],
+      "output": "engineering_task",
+      "transitions": {
+        "ready": { "next": "ready_for_build" },
+        "ambiguous": { "next": "needs_human" },
+        "blocked": { "next": "blocked" }
+      }
+    },
+    "ready_for_build": {
+      "description": "Every build task has a single owner, base SHA, branch, dependencies, and acceptance criteria.",
+      "next": "building"
+    },
+    "building": {
+      "agent": "AGENT-BUILDER-01",
+      "description": "Builders execute independently owned child tasks, run local checks, and hand off committed SHAs.",
+      "input": ["engineering_task", "repository"],
+      "output": "execution_result",
+      "transitions": {
+        "completed": { "next": "integration" },
+        "blocked": { "next": "blocked" }
+      }
+    },
+    "integration": {
+      "agent": "AGENT-INTEGRATOR-01",
+      "description": "The Integrator combines committed child-task SHAs in dependency order from a clean worktree and verifies the combined commit.",
+      "input": ["engineering_task", "execution_result", "repository"],
+      "output": "integration_result",
+      "transitions": {
+        "integrated": { "next": "independent_review" },
+        "conflict": { "next": "repair_planning" },
+        "blocked": { "next": "blocked" }
+      }
+    },
+    "independent_review": {
+      "description": "Verifier, Reviewer, and Security Adversary independently inspect the exact same integrated commit.",
+      "parallel": [
+        {
+          "name": "verification",
+          "agent": "AGENT-VERIFIER-01",
+          "input": ["engineering_task", "integration_result", "repository"],
+          "output": "verification_result"
+        },
+        {
+          "name": "review",
+          "agent": "AGENT-REVIEWER-01",
+          "input": ["engineering_task", "integration_result", "repository"],
+          "output": "review_result"
+        },
+        {
+          "name": "security_review",
+          "agent": "AGENT-SECURITY-ADVERSARY-01",
+          "input": ["engineering_task", "integration_result", "repository"],
+          "output": "review_result"
+        }
+      ],
+      "barrier": {
+        "mode": "all_terminal",
+        "transitions": {
+          "passed": { "next": "judging" },
+          "retryable_failure": { "next": "repair_planning", "condition": "attempts_remaining" },
+          "attempts_exhausted": { "next": "needs_human" },
+          "security_failure": { "next": "needs_human" },
+          "blocked": { "next": "blocked" }
+        }
+      }
+    },
+    "repair_planning": {
+      "agent": "AGENT-ENGINEERING-LEAD-01",
+      "description": "The Engineering Lead converts integration or review evidence into one bounded repair request without changing the original task.",
+      "input": ["engineering_task", "integration_result", "verification_result", "review_result", "findings"],
+      "output": "repair_request",
+      "transitions": {
+        "repairable": { "next": "repairing", "condition": "attempts_remaining" },
+        "non_retryable": { "next": "needs_human" },
+        "attempts_exhausted": { "next": "needs_human" }
+      }
+    },
+    "repairing": {
+      "agent": "AGENT-BUILDER-01",
+      "description": "The owning Builder applies the smallest authorized repair and hands off a new committed SHA.",
+      "input": ["engineering_task", "repair_request", "repository"],
+      "output": "execution_result",
+      "transitions": {
+        "repaired": { "next": "integration" },
+        "blocked": { "next": "blocked" }
+      }
+    },
+    "judging": {
+      "agent": "AGENT-JUDGE-01",
+      "description": "The Judge evaluates integration, verification, review, security, and repair evidence without changing the candidate.",
+      "input": ["engineering_task", "integration_result", "verification_result", "review_result", "findings"],
+      "output": "evidence_bundle",
+      "transitions": {
+        "passed": { "next": "ready_for_human" },
+        "failed": { "next": "needs_human" },
+        "needs_human": { "next": "needs_human" }
+      }
+    },
+    "ready_for_human": {
+      "description": "All required evidence is complete and the candidate awaits the reserved human approval gate.",
+      "transitions": {
+        "approved": { "next": "approved" },
+        "rejected": { "next": "rejected" }
+      }
+    },
+    "approved": {
+      "description": "Human approval is recorded and the exact judged candidate may proceed to merge.",
+      "next": "merging"
+    },
+    "merging": {
+      "agent": "AGENT-INTEGRATOR-01",
+      "description": "The Integrator confirms the judged SHA is unchanged, merges it through the authorized path, and records the resulting target SHA.",
+      "input": ["integration_result", "evidence_bundle", "repository"],
+      "output": "integration_result",
+      "transitions": {
+        "merged": { "next": "merged" },
+        "drifted": { "next": "needs_human" },
+        "conflict": { "next": "needs_human" },
+        "blocked": { "next": "blocked" }
+      }
+    },
+    "merged": {
+      "description": "The approved candidate is merged and the final target SHA and evidence are retained.",
+      "terminal": true
+    },
+    "rejected": {
+      "description": "A human rejected the candidate and the task is closed or superseded with retained evidence.",
+      "terminal": true
+    },
+    "blocked": {
+      "description": "A non-retryable execution or environment blocker requires human intervention.",
+      "terminal": true
+    },
+    "needs_human": {
+      "description": "A policy, authority, security, ambiguity, drift, or retry-limit condition requires a human decision.",
+      "terminal": true
+    }
+  }
+}
