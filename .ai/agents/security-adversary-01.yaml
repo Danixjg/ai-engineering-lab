@@ -1,10 +1,18 @@
 {
   "$schema": "../schemas/agent.schema.json",
-  "schema_version": "0.2",
+  "schema_version": "0.3",
   "agent_id": "AGENT-SECURITY-ADVERSARY-01",
   "name": "security-adversary-01",
   "role": "security",
-  "runtime": { "provider": "codex", "executable": "codex", "version": { "minimum": "0.149" } },
+  "runtime": {
+    "provider": "codex",
+    "executable": "codex",
+    "version": { "minimum": "0.149" },
+    "requirements": {
+      "runtime_mode": "local",
+      "capabilities": ["agent-skill-v1", "execution-manifest-v1", "local-worktree-v1", "rpc-v1", "skill-bundles-v1"]
+    }
+  },
   "skills": ["repository-analysis"],
   "dependencies": { "system": ["git"], "optional": ["docker"] },
   "authentication": { "required": ["codex", "github"] },

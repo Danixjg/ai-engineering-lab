@@ -174,5 +174,8 @@ environment:
 
 MultiEngin installs agent **CLIs/runtimes**, not hosted frontier models. It
 leaves application dependencies to each repository's own reproducible project
-environment. The lower-level `.infrastructure/verify-worker.sh` remains useful
-when validating a full host against the shared Python/Node compatibility line.
+environment. On `start`, it discovers the current daemon's runtime IDs, matches
+them to manifest-declared capabilities, and rebinds the selected persistent
+workspace agents when they still point at another machine. The lower-level
+`.infrastructure/verify-worker.sh` remains useful when validating a full host
+against the shared Python/Node compatibility line.

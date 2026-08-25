@@ -21,7 +21,11 @@ Multica or agent-CLI configuration and must not be committed here.
 Each file in `.ai/agents/` describes an agent's runtime, skills, system
 dependencies, required authentication, and health checks. The CLI resolves the
 union of those requirements for the selected agents, so Kiro, Codex, Git, and
-authentication are never provisioned twice.
+authentication are never provisioned twice. Runtime requirements include the
+execution mode and protocol capabilities an agent needs. MultiEngin compares
+those requirements with the capabilities reported by Multica runtimes; agent
+names are used only to identify the selected persistent workspace agents, not
+to infer runtime compatibility.
 
 `.ai/runtime/runtime-manifest.yaml` defines portable-runtime compatibility and
 maps provider names to local executable and authentication checks. These files
@@ -43,16 +47,35 @@ Run the repository launcher directly, or add `bin/` to your `PATH` to use
 ./bin/multiengin stop
 ```
 
-`start` checks the selected manifests, requests confirmation, installs missing
-Kiro or Codex CLIs, invokes the required interactive login flows, and starts
-the local Multica daemon. Kiro and Codex are built-in Multica runtime
-providers, so the daemon detects and registers their normal executables; no
-custom runtime profile is created for them. `stop` stops only the local daemon;
-it never stops cloud agents or changes cloud workspace state.
+`start` runs four stages:
 
-`doctor` and `agents` are read-only. `update` first runs `git pull --ff-only`
-to obtain the current manifests, then applies the same selected-agent
-provisioning checks as `start`.
+1. **Bootstrap** installs missing runtime CLIs, completes required login flows,
+   connects the workspace, and starts the local daemon.
+2. **Discover** reads the active workspace's agents and runtimes plus the
+   current daemon's registered runtime IDs.
+3. **Reconcile** chooses an online local runtime whose provider, mode, version,
+   and reported capabilities satisfy each selected manifest, then updates the
+   persistent workspace agent's runtime binding when required.
+4. **Verify** reads the workspace again and confirms that each selected agent
+   is bound to an online runtime on this machine, then checks its runtime CLI,
+   authentication, GitHub, repository access, and dependencies.
+
+If this daemon has not published a compatible local runtime yet, `start`
+restarts it once and repeats discovery. Repeated starts are idempotent: an
+agent already bound to a compatible runtime on this machine is not updated.
+The old runtime remains a Multica workspace runtime record; MultiEngin also
+records each successful transition in
+`${XDG_STATE_HOME:-~/.local/state}/multiengin/runtime-history.json`. That local
+history is operational state and must not be committed.
+
+Built-in runtime providers are detected and registered by the Multica daemon;
+no custom runtime profile is created for them. `stop` stops only the local
+daemon; it never stops cloud agents or changes cloud workspace state.
+
+`doctor` and `agents` are read-only and include current workspace-binding
+health when Multica is available. `update` first runs `git pull --ff-only` to
+obtain the current manifests, then applies the same four-stage reconciliation
+as `start`.
 
 ## Scope boundary
 
