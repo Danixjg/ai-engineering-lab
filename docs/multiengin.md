@@ -8,7 +8,8 @@ orchestration system.
 Multica Cloud                         Current machine
 -------------                         ---------------
 agents, squads, skills, policies  ->  multiengin start
-workspace state                    ->  local Kiro/Codex runtimes
+workspace state                    ->  OpenCode + local Ollama (iterations)
+                                     ->  Codex (control and assurance gates)
                                      ->  Multica daemon and worktrees
 ```
 
@@ -20,7 +21,7 @@ Multica or agent-CLI configuration and must not be committed here.
 
 Each file in `.ai/agents/` describes an agent's runtime, skills, system
 dependencies, required authentication, and health checks. The CLI resolves the
-union of those requirements for the selected agents, so Kiro, Codex, Git, and
+union of those requirements for the selected agents, so OpenCode, Codex, Git, and
 authentication are never provisioned twice. Runtime requirements include the
 execution mode and protocol capabilities an agent needs. MultiEngin compares
 those requirements with the capabilities reported by Multica runtimes; agent
@@ -41,10 +42,12 @@ with only Python's standard library.
 
 ## Commands
 
-Run the repository launcher directly, or add `bin/` to your `PATH` to use
-`multiengin` without a path prefix.
+Run the repository launcher directly, or install its symlink and persistent
+user `PATH` entry once. `install-path` refuses to replace an unrelated existing
+`~/.local/bin/multiengin` file and is safe to repeat.
 
 ```bash
+./bin/multiengin install-path
 ./bin/multiengin start                 # interactively select agents
 ./bin/multiengin start builder-01      # provision one agent
 ./bin/multiengin start --all
@@ -57,6 +60,69 @@ Run the repository launcher directly, or add `bin/` to your `PATH` to use
 ./bin/multiengin update --all
 ./bin/multiengin stop
 ```
+
+Reload the profile printed by `install-path` before invoking `multiengin`
+without the `./bin/` prefix. Bash uses `~/.bashrc`, zsh uses `~/.zshrc`, and
+other POSIX shells fall back to `~/.profile`.
+
+## OpenCode with a locally hosted model
+
+Builder-01 and Reviewer-01 are the iteration roles. Their manifests require the
+Multica `opencode` provider, OpenCode 1.17.7+, and a reachable Ollama service.
+The other roles retain Codex so a local iteration is independently integrated,
+verified, security-reviewed, and judged.
+
+Install/start Ollama, pull a tool-capable model approved for the machine, and
+configure OpenCode. The quickest supported setup is:
+
+```bash
+ollama pull <model-id>
+multiengin configure-opencode --model <model-id>
+opencode run --model ollama/<model-id> "Reply with the current repository name only."
+```
+
+`configure-opencode` creates a private user configuration and refuses to replace
+an existing one. Alternatively, copy [`config/opencode.ollama.example.json`](../config/opencode.ollama.example.json)
+to OpenCode's user configuration, replace both `REPLACE_WITH_MODEL_ID` values,
+and adjust `baseURL` when Ollama runs on a trusted model host rather than the
+same machine. Do not commit the resulting user configuration, tokens, private
+hostnames, or model credentials.
+
+Start or restart Multica only after `opencode` is on `PATH`; its daemon then
+auto-detects the built-in OpenCode provider. Configure the persistent workspace
+agents' model as `ollama/<model-id>` (or let their OpenCode runtime default select
+that configured model), then reconcile and verify:
+
+```bash
+multica daemon restart
+multiengin start builder-01 reviewer-01
+multiengin status builder-01 reviewer-01
+```
+
+OpenCode can reach an Ollama server on another trusted machine by changing the
+example's `baseURL`. Protect that network path with the organization's normal
+access controls; the repository intentionally supplies no shared secret.
+
+## Multiple execution machines
+
+Each worker checks out this repository, runs `multiengin install-path`, installs
+only the runtimes needed for its assigned roles, connects the same Multica
+workspace, and starts its own daemon with a distinct device name. Multica
+runtime bindings determine placement; repository files do not contain host IDs.
+
+A practical first split is:
+
+| Machine | Workload | Required runtime |
+| --- | --- | --- |
+| GPU iteration worker | Builder-01 and Reviewer-01 | OpenCode + Ollama |
+| Control worker | Engineering Lead, Integrator, Verifier, Security, Judge | Codex |
+
+Use `MULTICA_DAEMON_DEVICE_NAME` to make workers distinguishable and cap each
+host with `MULTICA_DAEMON_MAX_CONCURRENT_TASKS`. Run `multiengin start` only for
+the agents assigned to that machine; do not use `--all` across heterogeneous
+workers. A later scheduler can add capacity-aware placement, shared model
+serving, and failover without changing agent identity or committing machine
+addresses.
 
 `start` runs four stages:
 
@@ -79,7 +145,8 @@ records each successful transition in
 `${XDG_STATE_HOME:-~/.local/state}/multiengin/runtime-history.json`. That local
 history is operational state and must not be committed.
 
-Built-in runtime providers are detected and registered by the Multica daemon;
+Built-in runtime providers, including OpenCode, are detected and registered by
+the Multica daemon;
 no custom runtime profile is created for them. `stop` stops only the local
 daemon; it never stops cloud agents or changes cloud workspace state.
 
@@ -105,5 +172,6 @@ Repositories remain responsible for reproducible application environments
 system tools are reported with their owning agent; their OS-specific baseline
 installation remains available through `.infrastructure/bootstrap/`.
 
-The runtime CLIs are clients for hosted providers. Installing Kiro or Codex
-does not download a frontier model onto the machine.
+Installing an agent CLI does not install model weights. Codex remains a hosted
+provider client; the OpenCode iteration roles use the separately managed local
+Ollama model configured by the operator.

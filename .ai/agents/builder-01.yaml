@@ -5,9 +5,9 @@
   "name": "builder-01",
   "role": "builder",
   "runtime": {
-    "provider": "kiro",
-    "executable": "kiro-cli",
-    "version": { "minimum": "2.0" },
+    "provider": "opencode",
+    "executable": "opencode",
+    "version": { "minimum": "1.17.7" },
     "requirements": {
       "runtime_mode": "local",
       "capabilities": ["agent-skill-v1", "execution-manifest-v1", "local-worktree-v1", "rpc-v1", "skill-bundles-v1"],
@@ -15,10 +15,10 @@
     }
   },
   "skills": ["repository-analysis", "git-workflow", "analyze-test-failure"],
-  "dependencies": { "system": ["git"], "optional": ["docker"] },
-  "authentication": { "required": ["kiro", "github"] },
-  "health_checks": ["kiro_cli", "github", "repository_access"],
-  "responsibilities": ["Implement approved engineering tasks and report execution evidence."],
+  "dependencies": { "system": ["git", "ollama"], "optional": ["docker"] },
+  "authentication": { "required": ["github"] },
+  "health_checks": ["opencode_cli", "ollama", "github", "repository_access"],
+  "responsibilities": ["Iterate on approved engineering tasks with the locally hosted OpenCode model and report execution evidence."],
   "forbidden_actions": ["Merge or approve its own pull request."],
   "inputs": ["engineering_task", "repair_request", "repository"],
   "outputs": ["execution_result", "pull_request"]

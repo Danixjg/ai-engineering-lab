@@ -7,7 +7,7 @@ worker:
 
 agents:
   kiro:
-    required: true
+    required: false
     command: kiro-cli
     version: "2.0"
     auth: required
@@ -16,10 +16,17 @@ agents:
     command: codex
     version: "0.149"
     auth: required
+  opencode:
+    required: true
+    command: opencode
+    version: "1.17.7"
+    auth: none
+    model_host: ollama
 
 tools:
   git: required
   docker: required
+  ollama: required
 
 languages:
   python: "3.12"

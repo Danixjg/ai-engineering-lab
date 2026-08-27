@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bootstrap the non-secret dependencies for a macOS worker.
-# Kiro authentication and Docker Desktop's first-run approval remain
+# Model selection, authentication, and Docker Desktop's first-run approval remain
 # interactive by design; this script never accepts or stores credentials.
 set -euo pipefail
 
@@ -41,11 +41,13 @@ node_version="$(awk '/^languages:/{in_languages=1; next} in_languages && /^[^[:s
 mise use --global "python@$python_version" "node@$node_version"
 
 npm install --global "@openai/codex@$(agent_value codex version)"
+npm install --global "opencode-ai@$(agent_value opencode version)"
 
-export PATH="$HOME/.local/bin:$PATH"
-if ! command -v kiro-cli >/dev/null 2>&1; then
-  curl -fsSL https://cli.kiro.dev/install | bash
+if ! command -v ollama >/dev/null 2>&1; then
+  brew install ollama
 fi
 
-echo "Bootstrap complete. Authenticate required CLIs, start Multica's daemon, then run:"
+"$ROOT_DIR/bin/multiengin" install-path
+
+echo "Bootstrap complete. Start Ollama, configure OpenCode, authenticate required CLIs, start Multica's daemon, then run:"
 echo "  $ROOT_DIR/.infrastructure/verify-worker.sh"

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+from urllib.parse import urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,11 +26,19 @@ AGENTS_DIR = ROOT / ".ai" / "agents"
 RUNTIME_MANIFEST = ROOT / ".ai" / "runtime" / "runtime-manifest.yaml"
 WORKFLOW_MANIFEST = ROOT / ".ai" / "workflows" / "implementation.yaml"
 LOCAL_BIN = Path.home() / ".local" / "bin"
+OPENCODE_BIN = Path.home() / ".opencode" / "bin"
+NPM_GLOBAL_BIN = Path(
+    os.environ.get("NPM_CONFIG_PREFIX", str(Path.home() / ".npm-global"))
+) / "bin"
 STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
 RUNTIME_HISTORY = STATE_HOME / "multiengin" / "runtime-history.json"
-# Kiro's official installer creates this directory on fresh hosts. Include it
-# before installation as well so the same `start` invocation can find Kiro.
-os.environ["PATH"] = f"{LOCAL_BIN}{os.pathsep}{os.environ.get('PATH', '')}"
+OPENCODE_CONFIG = Path.home() / ".config" / "opencode" / "opencode.json"
+# Kiro/mise and OpenCode's official installers use these directories. Include
+# them before bootstrap so the same `start` invocation can find newly installed
+# tools even when the parent shell has not reloaded its profile yet.
+os.environ["PATH"] = os.pathsep.join(
+    [str(OPENCODE_BIN), str(NPM_GLOBAL_BIN), str(LOCAL_BIN), os.environ.get("PATH", "")]
+)
 AUTH_FAILURE = re.compile(
     r"not[ -]?logged|not authenticated|unauthenticated|invalid|expired|"
     r"login required|sign in|log in",
@@ -145,6 +154,25 @@ def command_version(command: str) -> tuple[bool, str]:
     return ok, output
 
 
+def npm_global_bin() -> Path | None:
+    if not shutil.which("npm"):
+        return None
+    ok, output = run(["npm", "prefix", "--global"])
+    if not ok or not first_line(output):
+        return None
+    return Path(first_line(output)) / "bin"
+
+
+def activate_npm_global_bin() -> bool:
+    binary_directory = npm_global_bin()
+    if binary_directory is None:
+        return False
+    paths = os.environ.get("PATH", "").split(os.pathsep)
+    if str(binary_directory) not in paths:
+        os.environ["PATH"] = f"{binary_directory}{os.pathsep}{os.environ.get('PATH', '')}"
+    return True
+
+
 def version_at_least(output: str, minimum: str) -> bool:
     matches = list(re.finditer(r"(?<!\d)(\d+(?:\.\d+){0,2})(?!\d)", output))
     if not matches:
@@ -208,6 +236,7 @@ def runtime_check(agent: dict[str, Any]) -> Check:
     runtime = agent["runtime"]
     command = runtime["executable"]
     minimum = runtime.get("version", {}).get("minimum")
+    activate_npm_global_bin()
     if not shutil.which(command):
         return Check(f"{agent['name']} runtime", False, f"{command} is not installed")
     ok, output = command_version(command)
@@ -236,6 +265,9 @@ def dependency_check(dependency: str, optional: bool) -> Check:
     if dependency == "docker":
         passed = bool(shutil.which("docker")) and run(["docker", "info"])[0]
         return Check("Docker", passed, "CLI missing or daemon unavailable", not optional)
+    if dependency == "ollama":
+        passed = bool(shutil.which("ollama")) and run(["ollama", "list"])[0]
+        return Check("Ollama", passed, "CLI missing or local model server unavailable", not optional)
     return Check(dependency, bool(shutil.which(dependency)), "command not found", not optional)
 
 
@@ -517,6 +549,13 @@ def install_runtime(agent: dict[str, Any], dry_run: bool) -> bool:
             print("  Node/npm is required before this runtime can be installed.")
             return False
         return subprocess.run(["npm", "install", "--global", f"@openai/codex@{minimum}"], check=False).returncode == 0
+    if installer == "opencode_cli":
+        if not shutil.which("npm"):
+            print("  Node/npm is required before this runtime can be installed.")
+            return False
+        return subprocess.run(
+            ["npm", "install", "--global", f"opencode-ai@{minimum}"], check=False
+        ).returncode == 0
     print(f"  no installer is configured for runtime provider: {provider}")
     return False
 
@@ -556,10 +595,10 @@ def bootstrap(selected: list[dict[str, Any]], yes: bool, dry_run: bool) -> bool:
     )
     missing_dependencies = sorted(
         {
-            check.name
+            dependency
             for agent in selected
-            for check in agent_checks(agent)
-            if not check.passed and check.blocking and check.name in {"git", "Docker"}
+            for dependency in agent.get("dependencies", {}).get("system", [])
+            if not dependency_check(dependency, False).passed
         }
     )
     if missing_languages or missing_runtimes or auths or missing_dependencies:
@@ -1254,6 +1293,107 @@ def update(selected: list[dict[str, Any]], yes: bool, dry_run: bool) -> int:
     return start(select_agents(manifests(), selected_names, False), yes=yes, dry_run=dry_run)
 
 
+def shell_profile(shell: str | None = None) -> Path:
+    shell_name = Path(shell or os.environ.get("SHELL", "")).name
+    if shell_name == "zsh":
+        return Path.home() / ".zshrc"
+    if shell_name == "bash":
+        return Path.home() / ".bashrc"
+    return Path.home() / ".profile"
+
+
+def install_path(
+    dry_run: bool,
+    local_bin: Path = LOCAL_BIN,
+    profile: Path | None = None,
+) -> int:
+    """Expose the repository launcher through a persistent user PATH entry."""
+    launcher = ROOT / "bin" / "multiengin"
+    destination = local_bin / "multiengin"
+    profile = shell_profile() if profile is None else profile
+    if destination.exists() or destination.is_symlink():
+        if not destination.is_symlink() or destination.resolve() != launcher.resolve():
+            raise ValueError(f"refusing to replace existing launcher: {destination}")
+        link_change = False
+    else:
+        link_change = True
+
+    home_local_bin = Path.home() / ".local" / "bin"
+    path_value = "$HOME/.local/bin" if local_bin == home_local_bin else str(local_bin)
+    path_lines = [f'export PATH="{path_value}:$PATH"']
+    global_npm_bin = npm_global_bin()
+    if global_npm_bin is not None and global_npm_bin.exists():
+        npm_path_value = (
+            "$HOME/" + str(global_npm_bin.relative_to(Path.home()))
+            if global_npm_bin.is_relative_to(Path.home())
+            else str(global_npm_bin)
+        )
+        path_lines.append(f'export PATH="{npm_path_value}:$PATH"')
+    existing_profile = profile.read_text(encoding="utf-8") if profile.exists() else ""
+    missing_path_lines = [line for line in path_lines if line not in existing_profile.splitlines()]
+
+    if dry_run:
+        if link_change:
+            print(f"would link: {destination} -> {launcher}")
+        for path_line in missing_path_lines:
+            print(f"would add to {profile}: {path_line}")
+        if not link_change and not missing_path_lines:
+            print(f"MultiEngin is already installed in PATH via {destination}")
+        return 0
+
+    if link_change:
+        local_bin.mkdir(parents=True, exist_ok=True)
+        destination.symlink_to(launcher)
+    if missing_path_lines:
+        profile.parent.mkdir(parents=True, exist_ok=True)
+        separator = "" if not existing_profile or existing_profile.endswith("\n") else "\n"
+        with profile.open("a", encoding="utf-8") as stream:
+            stream.write(
+                f"{separator}\n# MultiEngin launcher and managed runtime CLIs\n"
+                + "\n".join(missing_path_lines)
+                + "\n"
+            )
+    print(f"MultiEngin launcher: {destination}")
+    print(f"PATH profile: {profile}")
+    if missing_path_lines:
+        print(f"Reload with: source {profile}")
+    return 0
+
+
+def configure_opencode(
+    model: str,
+    base_url: str,
+    target: Path = OPENCODE_CONFIG,
+) -> int:
+    """Create a non-secret OpenCode configuration for an Ollama model host."""
+    model_id = model.removeprefix("ollama/").strip()
+    if not model_id or not re.fullmatch(r"[A-Za-z0-9._:/+-]+", model_id):
+        raise ValueError("model must be a non-empty Ollama model ID")
+    parsed = urlsplit(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("base URL must be an HTTP(S) URL with a host")
+    if target.exists():
+        raise ValueError(f"refusing to replace existing OpenCode configuration: {target}")
+    payload = {
+        "$schema": "https://opencode.ai/config.json",
+        "provider": {
+            "ollama": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "Ollama (local)",
+                "options": {"baseURL": base_url.rstrip("/")},
+                "models": {model_id: {"name": f"Local {model_id}"}},
+            }
+        },
+        "model": f"ollama/{model_id}",
+    }
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    target.chmod(0o600)
+    print(f"OpenCode local model: ollama/{model_id}")
+    print(f"OpenCode configuration: {target}")
+    return 0
+
+
 def stop(dry_run: bool) -> int:
     if not shutil.which("multica"):
         print("Multica CLI is not installed; no local daemon to stop.")
@@ -1282,12 +1422,23 @@ def main() -> int:
     for name in ("workflow-check", "squad-check"):
         command = subparsers.add_parser(name)
         command.add_argument("--output", choices=("table", "json"), default="table")
+    path_parser = subparsers.add_parser("install-path")
+    path_parser.add_argument("--dry-run", action="store_true")
+    opencode_parser = subparsers.add_parser("configure-opencode")
+    opencode_parser.add_argument("--model", required=True, help="installed Ollama model ID")
+    opencode_parser.add_argument(
+        "--base-url", default="http://127.0.0.1:11434/v1", help="Ollama OpenAI-compatible endpoint"
+    )
     stop_parser = subparsers.add_parser("stop")
     stop_parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "stop":
             return stop(args.dry_run)
+        if args.command == "install-path":
+            return install_path(args.dry_run)
+        if args.command == "configure-opencode":
+            return configure_opencode(args.model, args.base_url)
         if args.command == "workflow-check":
             return workflow_check_command(args.output)
         if args.command == "squad-check":

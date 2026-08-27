@@ -6,6 +6,9 @@
 - [x] Agent dependency resolver and deduplicated plan
 - [x] Interactive selection and targeted `start` command
 - [x] Kiro/Codex runtime installation adapters
+- [x] OpenCode runtime adapter with local Ollama health checks
+- [x] Persistent `multiengin` user-PATH installer
+- [x] Local-model Builder/Reviewer iteration roles
 - [x] Authentication and local health detection
 - [x] Multica daemon lifecycle (`start` and `stop`)
 - [x] `doctor`, `agents`, and `update` commands
@@ -14,6 +17,10 @@
 - [ ] Windows launcher and installer adapter
 - [ ] Automated cloud skill-import reconciliation, if Multica exposes a
       stable skill-sync operation beyond daemon-managed skill injection
+- [ ] Capacity-aware placement and failover across multiple Multica daemon
+      machines
+- [ ] Shared Ollama model-serving topology with authenticated transport,
+      health-aware routing, and per-host concurrency limits
 
 ## Subsequent agent work
 

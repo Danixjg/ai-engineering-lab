@@ -19,6 +19,11 @@
       "executable": "codex",
       "authentication_check": ["login", "status"],
       "installer": "codex_cli"
+    },
+    "opencode": {
+      "executable": "opencode",
+      "authentication_check": [],
+      "installer": "opencode_cli"
     }
   }
 }

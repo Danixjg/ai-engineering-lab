@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bootstrap the non-secret dependencies for a Linux worker.
-# It intentionally leaves Kiro installation and all authentication interactive.
+# It intentionally leaves model selection and all authentication interactive.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -41,12 +41,15 @@ node_version="$(awk '/^languages:/{in_languages=1; next} in_languages && /^[^[:s
 mise use --global "python@$python_version" "node@$node_version"
 
 npm install --global "@openai/codex@$(agent_value codex version)"
+npm install --global "opencode-ai@$(agent_value opencode version)"
 
-export PATH="$HOME/.local/bin:$PATH"
-if ! command -v kiro-cli >/dev/null 2>&1; then
-  curl -fsSL https://cli.kiro.dev/install | bash
+if ! command -v ollama >/dev/null 2>&1; then
+  curl -fsSL https://ollama.com/install.sh | sh
 fi
 
+"$ROOT_DIR/bin/multiengin" install-path
+
 echo "Docker may require a group/session refresh after installation."
+echo "Start Ollama and configure OpenCode with a local model before verification."
 echo "Authenticate required CLIs, start Multica's daemon, then run:"
 echo "  $ROOT_DIR/.infrastructure/verify-worker.sh"

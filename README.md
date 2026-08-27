@@ -18,6 +18,7 @@ server URL, runtime path, model credential, or other instance secret.
 | `.agents/skills/` | Canonical sources for reusable agent skills. |
 | `docs/multica/` | Multica skill bindings and [worktree coordination rules](docs/multica/worktree-coordination.md). |
 | `bin/multiengin` | Portable local-runtime launcher for the current machine. |
+| `config/` | Non-secret examples for local runtime providers such as OpenCode with Ollama. |
 | `.infrastructure/` | Low-level macOS/Linux baseline bootstrap and full-host verification. |
 | `scripts/package-skill.py` | Packages a canonical skill for import into Multica. |
 
@@ -163,17 +164,30 @@ Select and provision agents interactively:
 ./bin/multiengin start
 ```
 
+Install the launcher into `~/.local/bin` and persist that directory in the
+current shell's user profile:
+
+```bash
+./bin/multiengin install-path
+source ~/.bashrc # use ~/.zshrc when running zsh
+multiengin --help
+```
+
 Or target an agent, inspect all configured agents, and diagnose the local
 environment:
 
 ```bash
 ./bin/multiengin start builder-01
+./bin/multiengin configure-opencode --model <model-id>
 ./bin/multiengin agents --all
 ./bin/multiengin doctor --all
 ```
 
-MultiEngin installs agent **CLIs/runtimes**, not hosted frontier models. It
-leaves application dependencies to each repository's own reproducible project
+Builder and Reviewer iterations use OpenCode with a workspace-configured local
+Ollama model. Coordination, integration, verification, security, and judgment
+remain on Codex. MultiEngin installs agent **CLIs/runtimes**, not model weights;
+the operator installs or pulls the approved Ollama model separately. It leaves
+application dependencies to each repository's own reproducible project
 environment. On `start`, it discovers the current daemon's runtime IDs, matches
 them to manifest-declared capabilities, and rebinds the selected persistent
 workspace agents when they still point at another machine. The lower-level

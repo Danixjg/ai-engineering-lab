@@ -118,7 +118,75 @@ class MultiEnginTests(unittest.TestCase):
             self.assertTrue(set(CAPABILITIES).issubset(requirements["capabilities"]))
             self.assertIn(requirements["model_strategy"], {"preserve", "runtime_default"})
         selected = multiengin.select_agents(agents, ["builder-01"], False)
-        self.assertEqual(selected[0]["runtime"]["provider"], "kiro")
+        self.assertEqual(selected[0]["runtime"]["provider"], "opencode")
+        reviewer = multiengin.select_agents(agents, ["reviewer-01"], False)[0]
+        self.assertEqual(reviewer["runtime"]["provider"], "opencode")
+        self.assertIn("ollama", selected[0]["dependencies"]["system"])
+
+    def test_runtime_manifest_declares_opencode_installer(self) -> None:
+        runtime = multiengin.runtime_manifest()["runtimes"]["opencode"]
+        self.assertEqual(runtime["executable"], "opencode")
+        self.assertEqual(runtime["installer"], "opencode_cli")
+
+    def test_ollama_dependency_requires_a_reachable_local_server(self) -> None:
+        with (
+            mock.patch.object(multiengin.shutil, "which", return_value="/usr/local/bin/ollama"),
+            mock.patch.object(multiengin, "run", return_value=(False, "connection refused")),
+        ):
+            check = multiengin.dependency_check("ollama", False)
+        self.assertFalse(check.passed)
+        self.assertEqual(check.name, "Ollama")
+        self.assertIn("server unavailable", check.detail)
+
+    def test_opencode_installer_uses_pinned_npm_package(self) -> None:
+        manifest = agent_manifest(name="builder-01", provider="opencode")
+        manifest["runtime"]["version"]["minimum"] = "1.17.7"
+        with (
+            mock.patch.object(multiengin.shutil, "which", return_value="/usr/bin/npm"),
+            mock.patch.object(multiengin.subprocess, "run") as command,
+        ):
+            command.return_value.returncode = 0
+            installed = multiengin.install_runtime(manifest, dry_run=False)
+        self.assertTrue(installed)
+        command.assert_called_once_with(
+            ["npm", "install", "--global", "opencode-ai@1.17.7"], check=False
+        )
+
+    def test_install_path_is_idempotent_and_persists_local_bin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory)
+            local_bin = temporary / "bin"
+            profile = temporary / ".bashrc"
+            self.assertEqual(multiengin.install_path(False, local_bin, profile), 0)
+            self.assertEqual(multiengin.install_path(False, local_bin, profile), 0)
+            destination = local_bin / "multiengin"
+            self.assertTrue(destination.is_symlink())
+            self.assertEqual(destination.resolve(), ROOT / "bin" / "multiengin")
+            path_line = f'export PATH="{local_bin}:$PATH"'
+            self.assertEqual(profile.read_text(encoding="utf-8").count(path_line), 1)
+            completed = multiengin.subprocess.run(
+                [str(destination), "--help"], text=True, capture_output=True, check=False
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn("install-path", completed.stdout)
+
+    def test_configure_opencode_writes_private_local_ollama_config(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "opencode.json"
+            self.assertEqual(
+                multiengin.configure_opencode(
+                    "ollama/qwen3.5:2b", "http://127.0.0.1:11434/v1", target
+                ),
+                0,
+            )
+            payload = json.loads(target.read_text(encoding="utf-8"))
+            self.assertEqual(payload["model"], "ollama/qwen3.5:2b")
+            self.assertIn("qwen3.5:2b", payload["provider"]["ollama"]["models"])
+            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+            with self.assertRaisesRegex(ValueError, "refusing to replace"):
+                multiengin.configure_opencode(
+                    "qwen3.5:2b", "http://127.0.0.1:11434/v1", target
+                )
 
     def test_version_compatibility_uses_numeric_comparison(self) -> None:
         self.assertTrue(multiengin.version_at_least("codex-cli 0.149.0", "0.149"))

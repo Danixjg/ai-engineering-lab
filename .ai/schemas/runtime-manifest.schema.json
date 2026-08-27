@@ -35,7 +35,7 @@
         "properties": {
           "executable": { "type": "string", "minLength": 1 },
           "authentication_check": { "type": "array", "items": { "type": "string" } },
-          "installer": { "enum": ["kiro_cli", "codex_cli"] }
+          "installer": { "enum": ["kiro_cli", "codex_cli", "opencode_cli"] }
         }
       }
     }
