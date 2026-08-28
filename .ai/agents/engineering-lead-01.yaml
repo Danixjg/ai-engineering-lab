@@ -3,6 +3,7 @@
   "schema_version": "0.4",
   "agent_id": "AGENT-ENGINEERING-LEAD-01",
   "name": "engineering-lead-01",
+  "instructions_file": ".kiro/agents/engineering-lead.md",
   "role": "coordinator",
   "runtime": {
     "provider": "codex",

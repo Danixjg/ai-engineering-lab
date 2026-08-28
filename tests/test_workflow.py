@@ -22,6 +22,16 @@ class WorkflowTests(unittest.TestCase):
         checks = multiengin.workflow_checks()
         self.assertTrue(multiengin.ready(checks), [check.detail for check in checks if not check.passed])
 
+    def test_leader_instructions_define_durable_stage_handoff(self) -> None:
+        checks = {check.check_id: check for check in multiengin.workflow_checks()}
+        self.assertTrue(checks["WORKFLOW-LEADER-INSTRUCTIONS"].passed)
+        leader = next(
+            agent for agent in multiengin.manifests() if agent["name"] == "engineering-lead-01"
+        )
+        instructions = multiengin.instructions_path(leader).read_text(encoding="utf-8")
+        for marker in ("--parent", "--stage", "multica squad activity"):
+            self.assertIn(marker, instructions)
+
     def test_workflow_assigns_seven_roles_and_three_independent_reviews(self) -> None:
         workflow = multiengin.workflow_manifest()
         roles = workflow["squad"]["roles"]

@@ -39,6 +39,11 @@
       "minLength": 1
     },
 
+    "instructions_file": {
+      "type": "string",
+      "pattern": "^\\.kiro/agents/[a-z0-9-]+\\.md$"
+    },
+
     "role": {
       "type": "string",
       "enum": [

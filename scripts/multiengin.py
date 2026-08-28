@@ -110,6 +110,18 @@ def manifests() -> list[dict[str, Any]]:
     return found
 
 
+def instructions_path(agent: dict[str, Any]) -> Path:
+    raw_path = agent.get("instructions_file")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError(f"{agent.get('name', 'agent')} does not declare instructions_file")
+    path = (ROOT / raw_path).resolve()
+    if not path.is_relative_to(ROOT):
+        raise ValueError(f"instructions file escapes the repository: {raw_path}")
+    if not path.is_file():
+        raise ValueError(f"instructions file does not exist: {raw_path}")
+    return path
+
+
 def runtime_manifest() -> dict[str, Any]:
     return load_document(RUNTIME_MANIFEST)
 
@@ -439,6 +451,34 @@ def workflow_checks(
             not missing_agents,
             f"missing manifests: {', '.join(missing_agents)}",
             check_id="WORKFLOW-AGENTS",
+            category="workflow",
+        )
+    )
+
+    leader_manifest_id = squad.get("leader") if isinstance(squad, dict) else None
+    leader_manifest = by_id.get(str(leader_manifest_id))
+    leader_instruction_errors: list[str] = []
+    if leader_manifest is None:
+        leader_instruction_errors.append("leader manifest is missing")
+    else:
+        try:
+            instructions = instructions_path(leader_manifest).read_text(encoding="utf-8")
+        except (OSError, ValueError) as error:
+            leader_instruction_errors.append(str(error))
+        else:
+            required_markers = ("--parent", "--stage", "multica squad activity")
+            missing_markers = [marker for marker in required_markers if marker not in instructions]
+            if missing_markers:
+                leader_instruction_errors.append(
+                    "leader instructions lack durable orchestration markers: "
+                    + ", ".join(missing_markers)
+                )
+    checks.append(
+        Check(
+            "Workflow leader instructions",
+            not leader_instruction_errors,
+            " | ".join(leader_instruction_errors),
+            check_id="WORKFLOW-LEADER-INSTRUCTIONS",
             category="workflow",
         )
     )
@@ -1283,6 +1323,72 @@ def list_agents(selected: list[dict[str, Any]]) -> int:
     return 0 if all_ready else 1
 
 
+def sync_instructions(selected: list[dict[str, Any]], yes: bool, dry_run: bool) -> int:
+    """Persist repository-owned instructions on matching workspace agents."""
+    sources = [(agent, instructions_path(agent)) for agent in selected]
+    payload = json_output(
+        ["multica", "agent", "list", "--output", "json"], "list workspace agents"
+    )
+    workspace_agents = json_collection(payload, "agents", "list workspace agents")
+    by_name = {str(agent.get("name")): agent for agent in workspace_agents}
+    changes: list[tuple[dict[str, Any], dict[str, Any], str]] = []
+    for manifest, path in sources:
+        cloud_agent = by_name.get(str(manifest["name"]))
+        if cloud_agent is None or not cloud_agent.get("id"):
+            raise ValueError(f"workspace agent not found: {manifest['name']}")
+        detail = json_output(
+            ["multica", "agent", "get", str(cloud_agent["id"]), "--output", "json"],
+            f"read workspace agent {manifest['name']}",
+        )
+        if isinstance(detail, dict) and isinstance(detail.get("agent"), dict):
+            detail = detail["agent"]
+        if not isinstance(detail, dict):
+            raise ValueError(f"cannot read workspace agent {manifest['name']}: expected an object")
+        instructions = path.read_text(encoding="utf-8")
+        if detail.get("instructions") != instructions:
+            changes.append((manifest, cloud_agent, instructions))
+
+    if not changes:
+        print("Workspace agent instructions are already current.")
+        return 0
+
+    print("Instruction sync plan:")
+    for manifest, _, _ in changes:
+        print(f"  • update {manifest['name']} from {manifest['instructions_file']}")
+    if dry_run:
+        return 0
+    if not yes:
+        if not sys.stdin.isatty():
+            raise ValueError("instruction sync requires --yes in a non-interactive terminal")
+        if input("\nPersist these instructions in Multica? [y/N] ").strip().lower() not in {
+            "y",
+            "yes",
+        }:
+            print("Cancelled.")
+            return 1
+
+    for manifest, cloud_agent, instructions in changes:
+        ok, output = run(
+            [
+                "multica",
+                "agent",
+                "update",
+                str(cloud_agent["id"]),
+                "--instructions",
+                instructions,
+                "--output",
+                "json",
+            ]
+        )
+        if not ok:
+            raise ValueError(
+                f"cannot update workspace agent {manifest['name']}: "
+                f"{first_line(output) or 'command failed'}"
+            )
+        print(f"  ✓ {manifest['name']} instructions persisted")
+    return 0
+
+
 def update(selected: list[dict[str, Any]], yes: bool, dry_run: bool) -> int:
     print("Updating MultiEngin manifests from the repository...")
     if dry_run:
@@ -1408,30 +1514,100 @@ def stop(dry_run: bool) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    command_help = {
+        "install-path": "install multiengin and managed runtime CLIs on the user PATH",
+        "configure-opencode": "configure OpenCode to use an Ollama-hosted model",
+        "start": "prepare this machine and bind selected workspace agents",
+        "doctor": "check local tools, authentication, and workspace bindings",
+        "agents": "list configured agents and their readiness",
+        "status": "report host, workflow, squad, and agent readiness",
+        "workflow-check": "validate the repository workflow contract",
+        "squad-check": "validate the live Multica squad topology",
+        "sync-instructions": "persist repository-owned instructions on workspace agents",
+        "update": "pull manifest updates and reconcile selected agents",
+        "stop": "stop only this machine's Multica daemon",
+    }
+    examples = """examples:
+  First-time setup:
+    multiengin install-path
+    multiengin configure-opencode --model qwen3.5:2b
+
+  Start iteration agents:
+    multiengin start builder-01 reviewer-01
+    multiengin start --all
+
+  Inspect readiness:
+    multiengin doctor builder-01
+    multiengin agents --all
+    multiengin status --all
+    multiengin status --all --output json
+
+  Validate workflow configuration:
+    multiengin workflow-check
+    multiengin squad-check
+
+  Persist squad-leader orchestration:
+    multiengin sync-instructions engineering-lead-01 --yes
+
+  Maintain this worker:
+    multiengin update builder-01 reviewer-01
+    multiengin stop
+
+Use `multiengin COMMAND --help` for command-specific options.
+Agent arguments accept manifest names such as `builder-01` or agent IDs."""
+    parser = argparse.ArgumentParser(
+        prog="multiengin",
+        description="Prepare and reconcile local runtimes for Multica engineering agents.",
+        epilog=examples,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    subparsers = parser.add_subparsers(dest="command", title="commands", metavar="COMMAND")
     for name in ("start", "doctor", "agents", "update", "status"):
-        command = subparsers.add_parser(name)
-        command.add_argument("agents", nargs="*", metavar="AGENT")
+        command = subparsers.add_parser(name, help=command_help[name], description=command_help[name])
+        command.add_argument(
+            "agents", nargs="*", metavar="AGENT", help="agent manifest name or agent ID"
+        )
         command.add_argument("--all", action="store_true", help="select every configured agent")
         if name == "status":
             command.add_argument("--output", choices=("table", "json"), default="table")
         if name in {"start", "update"}:
             command.add_argument("--yes", action="store_true", help="do not ask before provisioning")
             command.add_argument("--dry-run", action="store_true", help="show mutations without performing them")
+    sync_parser = subparsers.add_parser(
+        "sync-instructions",
+        help=command_help["sync-instructions"],
+        description=command_help["sync-instructions"],
+    )
+    sync_parser.add_argument(
+        "agents", nargs="*", metavar="AGENT", help="agent manifest name or agent ID"
+    )
+    sync_parser.set_defaults(all=False)
+    sync_parser.add_argument("--yes", action="store_true", help="do not ask before updating agents")
+    sync_parser.add_argument("--dry-run", action="store_true", help="show updates without applying them")
     for name in ("workflow-check", "squad-check"):
-        command = subparsers.add_parser(name)
+        command = subparsers.add_parser(name, help=command_help[name], description=command_help[name])
         command.add_argument("--output", choices=("table", "json"), default="table")
-    path_parser = subparsers.add_parser("install-path")
+    path_parser = subparsers.add_parser(
+        "install-path", help=command_help["install-path"], description=command_help["install-path"]
+    )
     path_parser.add_argument("--dry-run", action="store_true")
-    opencode_parser = subparsers.add_parser("configure-opencode")
+    opencode_parser = subparsers.add_parser(
+        "configure-opencode",
+        help=command_help["configure-opencode"],
+        description=command_help["configure-opencode"],
+    )
     opencode_parser.add_argument("--model", required=True, help="installed Ollama model ID")
     opencode_parser.add_argument(
         "--base-url", default="http://127.0.0.1:11434/v1", help="Ollama OpenAI-compatible endpoint"
     )
-    stop_parser = subparsers.add_parser("stop")
+    stop_parser = subparsers.add_parser(
+        "stop", help=command_help["stop"], description=command_help["stop"]
+    )
     stop_parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+    if args.command is None:
+        parser.print_help()
+        return 0
     try:
         if args.command == "stop":
             return stop(args.dry_run)
@@ -1444,6 +1620,8 @@ def main() -> int:
         if args.command == "squad-check":
             return squad_check_command(args.output)
         selected = select_agents(manifests(), args.agents, args.all)
+        if args.command == "sync-instructions":
+            return sync_instructions(selected, args.yes, args.dry_run)
         if args.command == "doctor":
             return doctor(selected)
         if args.command == "agents":

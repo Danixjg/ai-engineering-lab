@@ -1,26 +1,47 @@
 # AI Engineering Lab
 
 This repository is the version-controlled source for an autonomous engineering
-workflow running in Multica. It contains role instructions, machine-readable
-task and evidence contracts, shared skills, and the policies that govern
-concurrent work. It intentionally does not contain a Multica workspace ID,
-server URL, runtime path, model credential, or other instance secret.
+workflow that can run locally with Codex or through Multica. It contains role
+instructions, machine-readable task and evidence contracts, shared skills, and
+the policies that govern concurrent work. It intentionally does not contain a
+Multica workspace ID, server URL, runtime path, model credential, or other
+instance secret.
 
 ## Repository layout
 
 | Path | Purpose |
 | --- | --- |
-| `.kiro/agents/` | Builder and verifier role instructions. |
+| `.kiro/agents/` | Repository-owned role instructions, including durable squad orchestration. |
 | `.ai/schemas/` | Contracts for tasks, results, findings, and workflow state. |
 | `.ai/workflows/` | The engineering-task lifecycle. |
 | `.ai/agents/` | Canonical runtime, skill, dependency, and health requirements for each agent. |
 | `.ai/runtime/` | Portable-runtime compatibility and provider adapters. |
 | `.agents/skills/` | Canonical sources for reusable agent skills. |
 | `docs/multica/` | Multica skill bindings and [worktree coordination rules](docs/multica/worktree-coordination.md). |
+| `bin/englab` | Local-first Codex squad runner using isolated Git worktrees. |
 | `bin/multiengin` | Portable local-runtime launcher for the current machine. |
 | `config/` | Non-secret examples for local runtime providers such as OpenCode with Ollama. |
 | `.infrastructure/` | Low-level macOS/Linux baseline bootstrap and full-host verification. |
 | `scripts/package-skill.py` | Packages a canonical skill for import into Multica. |
+
+## Local-first Codex squad
+
+Use [EngLab](docs/local-runner.md) when you want the repository's engineering
+roles and evidence gates without a Multica queue. It plans the issue, runs
+independent Builders in parallel worktrees, integrates committed SHAs, runs
+Verifier/Reviewer/Security in parallel against one candidate, and stops after
+Judge for explicit human approval.
+
+```bash
+codex login
+./bin/englab doctor --repo /path/to/project
+./bin/englab run issue.md --repo /path/to/project --dry-run
+./bin/englab run issue.md --repo /path/to/project --max-builders 2
+```
+
+The default target is the current directory. EngLab never pushes or merges, and
+it retains worktrees, branches, logs, structured results, and run state under
+`.englab/` for inspection.
 
 ## Multica instance setup
 
@@ -112,6 +133,17 @@ they are workspace/runtime configuration, not a repository policy. Do not pass
 secrets through `--custom-env` on a command line: it can expose them through
 shell history or process listings. Use the CLI's stdin or protected-file option
 when custom environment values are unavoidable.
+
+Persist the repository-owned Engineering Lead instructions on the existing
+workspace agent. This runbook makes each completed Multica stage wake the
+parent, reconstruct durable state, and enqueue the next required stage:
+
+```bash
+./bin/multiengin sync-instructions engineering-lead-01 --yes
+```
+
+The sync is idempotent and updates only the selected agent. Re-run it after the
+instruction source changes because workspace instructions are stored snapshots.
 
 ### 4. Register the repository and import shared skills
 

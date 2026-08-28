@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-engineering-lab.local/schemas/local-agent-result.schema.json",
+  "title": "Local Codex Agent Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "role",
+    "task_id",
+    "status",
+    "summary",
+    "commit_sha",
+    "checks",
+    "findings",
+    "acceptance_criteria"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "0.1" },
+    "role": {
+      "type": "string",
+      "enum": ["builder", "integrator", "verifier", "reviewer", "security-adversary", "judge"]
+    },
+    "task_id": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["completed", "integrated", "pass", "fail", "blocked", "conflict", "needs_human"]
+    },
+    "summary": { "type": "string", "minLength": 1 },
+    "commit_sha": { "type": "string" },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "evidence"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["passed", "failed", "skipped", "not_run"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "title", "description", "location"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "location": { "type": "string" }
+        }
+      }
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["passed", "failed", "not_verified"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    }
+  }
+}

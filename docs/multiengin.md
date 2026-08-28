@@ -46,6 +46,11 @@ Run the repository launcher directly, or install its symlink and persistent
 user `PATH` entry once. `install-path` refuses to replace an unrelated existing
 `~/.local/bin/multiengin` file and is safe to repeat.
 
+Run `multiengin` without arguments at any time to print the command catalog,
+first-time setup sequence, agent-selection examples, readiness commands, and
+maintenance usage. Run `multiengin <command> --help` for command-specific
+arguments.
+
 ```bash
 ./bin/multiengin install-path
 ./bin/multiengin start                 # interactively select agents
@@ -57,6 +62,7 @@ user `PATH` entry once. `install-path` refuses to replace an unrelated existing
 ./bin/multiengin status --all --output json
 ./bin/multiengin workflow-check
 ./bin/multiengin squad-check
+./bin/multiengin sync-instructions engineering-lead-01 --yes
 ./bin/multiengin update --all
 ./bin/multiengin stop
 ```
@@ -162,6 +168,13 @@ validates transitions, reachability, agent contracts, review barriers, and
 terminal outcomes without contacting Multica. `squad-check` verifies that the
 live Engineering Squad has the repository-declared leader, seven role
 assignments, and member count.
+
+`sync-instructions` persists a selected repository-owned instruction file on
+its matching workspace agent. The Engineering Lead runbook uses Multica parent
+issues, monotonically increasing child stages, stage barriers, and squad
+activity records so orchestration resumes after each worker becomes idle. The
+operation is explicit and idempotent; MultiEngin does not overwrite agent
+instructions during ordinary runtime reconciliation.
 
 ## Scope boundary
 

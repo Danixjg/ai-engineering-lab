@@ -97,6 +97,20 @@ def discovery(
 
 
 class MultiEnginTests(unittest.TestCase):
+    def test_bare_command_prints_documented_usage(self) -> None:
+        output = io.StringIO()
+        with mock.patch.object(sys, "argv", ["multiengin"]), mock.patch("sys.stdout", output):
+            result = multiengin.main()
+
+        self.assertEqual(result, 0)
+        rendered = output.getvalue()
+        self.assertIn("usage: multiengin [-h] COMMAND ...", rendered)
+        self.assertIn("commands:", rendered)
+        self.assertIn("multiengin install-path", rendered)
+        self.assertIn("multiengin configure-opencode --model qwen3.5:2b", rendered)
+        self.assertIn("multiengin start builder-01 reviewer-01", rendered)
+        self.assertIn("multiengin COMMAND --help", rendered)
+
     def test_manifests_cover_configured_agents_and_declare_runtime_requirements(self) -> None:
         agents = multiengin.manifests()
         self.assertEqual(
@@ -208,6 +222,59 @@ class MultiEnginTests(unittest.TestCase):
         self.assertEqual([agent["name"] for agent in selected], ["verifier-01"])
         with self.assertRaisesRegex(ValueError, "unknown agent"):
             multiengin.select_agents(agents, ["does-not-exist"], False)
+
+    def test_sync_instructions_updates_changed_workspace_agent(self) -> None:
+        lead = next(
+            agent for agent in multiengin.manifests() if agent["name"] == "engineering-lead-01"
+        )
+        expected = multiengin.instructions_path(lead).read_text(encoding="utf-8")
+        with (
+            mock.patch.object(
+                multiengin,
+                "json_output",
+                side_effect=[
+                    {"agents": [{"id": "lead-cloud-01", "name": "engineering-lead-01"}]},
+                    {"id": "lead-cloud-01", "instructions": "old instructions"},
+                ],
+            ),
+            mock.patch.object(multiengin, "run", return_value=(True, "{}")) as command,
+        ):
+            result = multiengin.sync_instructions([lead], yes=True, dry_run=False)
+
+        self.assertEqual(result, 0)
+        command.assert_called_once_with(
+            [
+                "multica",
+                "agent",
+                "update",
+                "lead-cloud-01",
+                "--instructions",
+                expected,
+                "--output",
+                "json",
+            ]
+        )
+
+    def test_sync_instructions_is_idempotent(self) -> None:
+        lead = next(
+            agent for agent in multiengin.manifests() if agent["name"] == "engineering-lead-01"
+        )
+        expected = multiengin.instructions_path(lead).read_text(encoding="utf-8")
+        with (
+            mock.patch.object(
+                multiengin,
+                "json_output",
+                side_effect=[
+                    {"agents": [{"id": "lead-cloud-01", "name": "engineering-lead-01"}]},
+                    {"agent": {"id": "lead-cloud-01", "instructions": expected}},
+                ],
+            ),
+            mock.patch.object(multiengin, "run") as command,
+        ):
+            result = multiengin.sync_instructions([lead], yes=True, dry_run=False)
+
+        self.assertEqual(result, 0)
+        command.assert_not_called()
 
     def test_rebinds_same_workspace_agent_from_old_machine_and_preserves_history(self) -> None:
         manifest = agent_manifest()
